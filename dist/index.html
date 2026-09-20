@@ -102,20 +102,29 @@
   .face.jp .txt{font-size:clamp(28px,8.5vw,52px);font-weight:700}
   .face .blank{color:var(--blank);margin:0 1px}
   .face .note{display:block;margin-top:10px;font-size:14px;font-weight:400;color:var(--muted)}
-  .marks{flex:none;display:flex;gap:10px;padding:0 10px 10px}
-  .marks button{flex:1;height:60px;border-radius:14px;border:2px solid var(--line);background:var(--card);font-size:30px;font-weight:700;color:var(--fg)}
-  .marks button.o{color:var(--ok);border-color:var(--ok)}
-  .marks button.x{color:var(--ng);border-color:var(--ng)}
-  .marks button.sel{color:#fff}
-  .marks button.o.sel{background:var(--ok)}
-  .marks button.x.sel{background:var(--ng)}
+  /* 「覚えた」ボタン1つ。幅いっぱいにせず右寄せ＝「次へ」の形に見せない（進む操作はタップ/スワイプ） */
+  .marks{flex:none;display:flex;justify-content:flex-end;padding:0 10px 10px}
+  .marks button{min-width:46%;height:56px;border-radius:14px;border:2px solid var(--ok);background:var(--card);font-size:19px;font-weight:700;color:var(--ok)}
+  .marks button.sel{background:var(--ok);color:#fff}
   .marks button:active{transform:scale(.97)}
   @media (orientation: landscape){
     .body{flex-direction:row}
-    .marks button{height:52px;font-size:26px}
+    .marks button{height:48px;font-size:17px}
     .face.formula .txt{font-size:clamp(36px,9vh,72px)}
     .face.jp .txt{font-size:clamp(24px,6.5vh,44px)}
   }
+  /* ===== カード一覧（別画面） ===== */
+  #detail{max-width:560px;margin:0 auto;padding:6px max(14px,env(safe-area-inset-left)) 40px}
+  #detail .topbar{padding:0;margin-bottom:6px}
+  .drow{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line)}
+  .drow:first-child{border-top:none}
+  .drow .sym{flex:none;min-width:5.5em;font-weight:700;font-size:17px;font-family:"Helvetica Neue",Arial,"Noto Sans JP",sans-serif}
+  .drow .nm{flex:1;min-width:0;font-size:15px;overflow-wrap:anywhere}
+  .drow .stt{flex:none;font-size:12px;color:var(--muted);min-width:4.5em;text-align:right}
+  .drow .stt.g{color:var(--ok);font-weight:700}
+  .drow .rst{flex:none;border:1px solid var(--line);background:var(--card);color:var(--muted);border-radius:8px;font-size:12px;padding:5px 8px;visibility:hidden}
+  .drow.has .rst{visibility:visible}
+  .lvl .lst{flex:none;border:1px solid var(--line);background:var(--card);color:var(--accent);border-radius:8px;font-size:12px;padding:5px 7px}
   .overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg);padding:24px}
   .overlay .box{max-width:360px;width:100%;text-align:center}
   .overlay h3{font-size:22px;margin:0 0 8px}
@@ -132,9 +141,9 @@
     <h2>使い方</h2>
     <ul class="howto">
       <li><b>問題の面</b>をタップ → 答えが1つずつ開く（ヒント）</li>
-      <li><b>答えの面</b>をタップ → 答えが全部出る。<b>もう一度タップ → 次のカード</b>（頻度調整ONのときは × 扱い）</li>
-      <li><b>左にスワイプ</b> → 次のカード／<b>右にスワイプ</b> → 前のカード（○×を押し直せる）</li>
-      <li><b>頻度調整</b>（はじめはON）：○×で出る回数が変わる。<b>2回続けて○</b>にしたカードは「覚えた」になり、出なくなる。試験前に全部見たいときはOFFに</li>
+      <li><b>答えの面</b>をタップ → 答えが全部出る。<b>もう一度タップ、または左にスワイプ → 次のカード</b></li>
+      <li><b>右にスワイプ</b> → 前のカードに戻る（押し直しできる）</li>
+      <li><b>頻度調整</b>（はじめはON）：「<b>覚えた</b>」を押したカードは出にくくなり、<b>2回続けて押す</b>と出なくなる。押さずに次へ進むと元に戻る。試験前に全部見たいときはOFFに</li>
     </ul>
   </div>
 
@@ -165,7 +174,17 @@
   <button class="btn" id="btn-start">はじめる</button>
   <div style="height:22px"></div>
   <button class="btn warn" id="btn-reset-all">学習記録を全部リセット</button>
-  <div class="ver">v9e130a0d07</div>
+  <div class="ver">v57b1fb5b41</div>
+</div>
+
+<!-- ===== カード一覧（レベル内の1枚ずつ戻す） ===== -->
+<div id="detail" class="hidden">
+  <div class="topbar">
+    <button id="btn-detail-top">‹ トップ</button>
+    <span class="pos" id="detail-title"></span>
+    <span></span>
+  </div>
+  <div class="card" id="detail-list"></div>
 </div>
 
 <!-- ===== カード ===== -->
@@ -180,8 +199,7 @@
     <div class="face" id="a"><div class="txt" id="a-txt"></div></div>
   </div>
   <div class="marks hidden" id="marks">
-    <button class="o" data-m="o" aria-label="覚えた">○</button>
-    <button class="x" data-m="x" aria-label="わからない">×</button>
+    <button class="o" data-m="o">覚えた</button>
   </div>
   <div class="overlay hidden" id="done">
     <div class="box">
@@ -215,10 +233,10 @@
   /* ===================== 定数 ===================== */
   var CONFIG = {
     W_INIT: 1.0,
-    W_O: 0.5,        // ○: 重み × 0.5
-    W_X: 2.0,        // ×: 重み × 2.0（答え欄タップで次へ進んだ時も × 扱い）
+    W_O: 0.5,        // 覚えた(○): 重み × 0.5（出にくくなる）
     W_MIN: 0.1,
-    W_MAX: 8.0,
+    // ×（答え面タップ・左スワイプで次へ進む＝覚えていない扱い）は重みを W_INIT に戻すだけで、上げない（owner決定 2026-09-20）
+    // → 状態は実質3つ: 未(1.0) / ○1回(0.5) / ○2回(覚えた=非表示)
     COOLDOWN_RATIO: 0.3,   // 直近 floor(0.3 × 候補数) 枚は出さない
     HIDE_STREAK: 2,        // 連続○ 2回で「覚えた」＝出なくなる
     STREAK_ONCE_PER_DAY: false,  // true にすると連続○カウントは1日1回まで（=最低2日かかる）。owner指示で既定 false（2026-09-20）
@@ -445,7 +463,7 @@
     return { w: any ? w : CONFIG.W_INIT, grad: any ? grad : false };
   }
 
-  function clamp(w) { return Math.min(CONFIG.W_MAX, Math.max(CONFIG.W_MIN, w)); }
+  function clamp(w) { return Math.min(CONFIG.W_INIT, Math.max(CONFIG.W_MIN, w)); }
 
   /**
    * ○× を適用（SPEC §5.3）。mark ∈ 'o' | 'x'。today = 'YYYY-MM-DD'（STREAK_ONCE_PER_DAY 用）。
@@ -464,7 +482,7 @@
         if (s.streak >= CONFIG.HIDE_STREAK) s.grad = true;
         s.o += 1;
       } else {
-        s.w = clamp(s.w * CONFIG.W_X);
+        s.w = CONFIG.W_INIT;      // 基準値に戻す（○の割引を取り消す）。上げはしない
         s.streak = 0;
         s.grad = false;
         s.x += 1;
@@ -552,6 +570,38 @@
     return { total: total, grad: grad };
   }
 
+  /** カード1枚のリセット（dir 省略で両方向）＝状態を消して「未」に戻す */
+  function resetCard(store, cardIdStr, dir) {
+    (dir ? [dir] : DIRS).forEach(function (d) { delete store.items[itemKey(cardIdStr, d)]; });
+  }
+
+  /**
+   * レベル内のカード一覧（別画面用）。dirs で指定した方向の状態をまとめる。
+   * 戻り値: [{ card, grad(全方向で覚えた), any(何か記録あり), states: {sn:{...}, ns:{...}} }] — 覚えた → 覚えた×1 → 記録あり → 未 の順
+   */
+  function cardList(cards, store, lk, dirs) {
+    var ds = dirs || DIRS;
+    var out = cards.filter(function (c) { return levelKey(c) === lk; }).map(function (c) {
+      var states = {}, grad = true, any = false;
+      ds.forEach(function (d) {
+        var k = itemKey(c.id, d);
+        states[d] = store.items[k] || null;
+        if (states[d]) any = true;
+        if (!states[d] || !states[d].grad) grad = false;
+      });
+      return { card: c, grad: grad, any: any, states: states };
+    });
+    // 並び: 覚えた → 覚えた×1（streak≥1）→ 記録あり（×のみ）→ 未
+    function rank(r) {
+      if (r.grad) return 0;
+      var st = 0; Object.keys(r.states).forEach(function (d) { if (r.states[d] && r.states[d].streak > st) st = r.states[d].streak; });
+      if (st >= 1) return 1;
+      return r.any ? 2 : 3;
+    }
+    out.sort(function (a, b) { return rank(a) - rank(b); });
+    return out;
+  }
+
   /** レベル×方向のリセット（dir 省略で両方向） */
   function resetLevel(store, cards, lk, dir) {
     var dirs = dir ? [dir] : DIRS;
@@ -587,7 +637,7 @@
     emptyStore: emptyStore, freshState: freshState, getState: getState, itemState: itemState,
     applyMark: applyMark, undoMark: undoMark,
     makeRng: makeRng, cooldownFor: cooldownFor, pickNext: pickNext,
-    progress: progress, summary: summary, resetLevel: resetLevel, levelList: levelList
+    progress: progress, summary: summary, resetLevel: resetLevel, resetCard: resetCard, cardList: cardList, levelList: levelList
   };
 });
 </script>
@@ -626,7 +676,7 @@
     var d = store.settings.dir, f = !!store.settings.freq;
     Array.prototype.forEach.call($('seg-dir').children, function (b) { b.classList.toggle('on', b.getAttribute('data-dir') === d); });
     $('sw-freq').classList.toggle('on', f); $('sw-freq').setAttribute('aria-checked', String(f));
-    $('freq-desc').textContent = f ? 'ON：○×で出る回数が変わる・2回続けて○のカードは出ない' : 'OFF：全部のカードが均等に出る（○×なし）';
+    $('freq-desc').textContent = f ? 'ON：「覚えた」を押したカードは出にくくなり、2回続けると出なくなる' : 'OFF：全部のカードが均等に出る（記録しない）';
 
     // 全体概要
     var sumHtml = '';
@@ -653,6 +703,7 @@
         '<span class="name">Lv' + l.level + ' <span class="muted">' + l.count + '枚</span></span>' +
         '<span class="bars">' + bars + '</span>' +
         '<span class="num">' + nums.join('/') + ' / ' + l.count + '</span>' +
+        '<button type="button" class="lst" data-lst="' + E.escapeHtml(l.key) + '">一覧</button>' +
         '<button type="button" class="rst" data-rst="' + E.escapeHtml(l.key) + '">リセット</button></label>';
     });
     $('levels').innerHTML = html;
@@ -681,7 +732,43 @@
     $('done').classList.add('hidden');
     next();
   }
-  function toTop() { S = null; $('card').classList.add('hidden'); $('top').classList.remove('hidden'); renderTop(); }
+  function toTop() { S = null; $('card').classList.add('hidden'); $('detail').classList.add('hidden'); $('top').classList.remove('hidden'); renderTop(); }
+
+  /* ===================== カード一覧（1枚ずつ戻す） ===================== */
+  var detailKey = null;
+  function openDetail(lk) {
+    detailKey = lk;
+    $('top').classList.add('hidden'); $('detail').classList.remove('hidden');
+    renderDetail();
+  }
+  function stateLabel(s) {
+    if (!s) return '—';
+    if (s.grad) return '覚えた';
+    if (s.streak >= 1) return '覚えた×1';
+    return '記録あり';
+  }
+  function renderDetail() {
+    var parts = detailKey.split(':');
+    var ds = dirs();
+    $('detail-title').textContent = parts[0] + ' Lv' + parts[1] + '（' + ds.map(function (d) { return E.DIR_LABEL[d]; }).join(' / ') + '）';
+    var list = E.cardList(CARDS, store, detailKey, ds);
+    var html = '';
+    list.forEach(function (row) {
+      var stt = ds.map(function (d) { return stateLabel(row.states[d]); }).join(' / ');
+      html += '<div class="drow' + (row.any ? ' has' : '') + '">' +
+        '<span class="sym">' + E.renderTokens(E.tokenize(row.card.symbol), 99, true) + '</span>' +
+        '<span class="nm">' + E.escapeHtml(row.card.name) + '</span>' +
+        '<span class="stt' + (row.grad ? ' g' : '') + '">' + E.escapeHtml(stt) + '</span>' +
+        '<button type="button" class="rst" data-card="' + E.escapeHtml(row.card.id) + '">戻す</button></div>';
+    });
+    $('detail-list').innerHTML = html || '<div class="muted">カードがありません</div>';
+  }
+  $('detail-list').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-card]'); if (!b) return;
+    dirs().forEach(function (d) { E.resetCard(store, b.getAttribute('data-card'), d); });
+    save(); renderDetail();
+  });
+  $('btn-detail-top').addEventListener('click', toTop);
 
   function current() { return S && S.pos >= 0 ? S.hist[S.pos] : null; }
 
@@ -703,6 +790,13 @@
     render();
   }
   function latest() { if (!S) return; S.pos = S.hist.length - 1; render(); }
+  /* 「次へ進む」操作（答え面の再タップ・左スワイプ）。履歴の途中なら前に進むだけ。
+     最新のカードでは、頻度調整ONなら × 扱い（=覚えていない。重みを基準に戻す）で記録して次へ。 */
+  function advance() {
+    var h = current(); if (!h) return;
+    if (S.pos < S.hist.length - 1) { next(); return; }
+    if (store.settings.freq && !h.mark) mark('x'); else next();
+  }
 
   function render() {
     var h = current(); if (!h) return;
@@ -728,9 +822,9 @@
     var h = current(); if (!h) return;
     var n = E.tokenize(h.item.answer).length;
     if (h.revealed < n) { h.revealed = n; h.revealedAt = Date.now(); render(); return; }
-    // 全表示済みで答え面をもう一度タップ → 次へ。頻度調整ONなら × 扱い（全表示から300msは無効＝連打の誤爆防止）
+    // 全表示済みで答え面をもう一度タップ → 次へ（全表示から300msは無効＝連打の誤爆防止）
     if (Date.now() - h.revealedAt <= 300) return;
-    if (store.settings.freq) mark('x'); else next();
+    advance();
   }
   function mark(m) {
     var h = current(); if (!h) return;
@@ -748,7 +842,7 @@
     var t = e.changedTouches[0]; var dx = t.clientX - sx, dy = t.clientY - sy;
     if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5 && Date.now() - st < 800) {
       swiped = true;
-      if (dx < 0) next(); else prev();
+      if (dx < 0) advance(); else prev();
     }
   }, { passive: true });
   // マウス（PC確認用）
@@ -756,7 +850,7 @@
   body.addEventListener('mousedown', function (e) { mdown = { x: e.clientX, y: e.clientY }; swiped = false; });
   body.addEventListener('mouseup', function (e) {
     if (!mdown) return; var dx = e.clientX - mdown.x, dy = e.clientY - mdown.y; mdown = null;
-    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) { swiped = true; if (dx < 0) next(); else prev(); }
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) { swiped = true; if (dx < 0) advance(); else prev(); }
   });
   $('q').addEventListener('click', function () { if (swiped) { swiped = false; return; } hint(); });
   $('a').addEventListener('click', function () { if (swiped) { swiped = false; return; } revealAll(); });
@@ -766,9 +860,9 @@
   $('btn-done-top').addEventListener('click', toTop);
   document.addEventListener('keydown', function (e) {   // PC確認用
     if (!S || $('card').classList.contains('hidden')) return;
-    if (e.key === 'ArrowLeft') prev(); else if (e.key === 'ArrowRight') next();
+    if (e.key === 'ArrowLeft') prev(); else if (e.key === 'ArrowRight') advance();
     else if (e.key === 'h') hint(); else if (e.key === ' ') { e.preventDefault(); revealAll(); }
-    else if (e.key === '1') mark('o'); else if (e.key === '2') mark('x');
+    else if (e.key === '1') mark('o');
   });
 
   /* ===================== トップの操作 ===================== */
@@ -785,6 +879,8 @@
     save(); renderTop();
   });
   $('levels').addEventListener('click', function (e) {
+    var lb = e.target.closest('button[data-lst]');
+    if (lb) { e.preventDefault(); openDetail(lb.getAttribute('data-lst')); return; }
     var b = e.target.closest('button[data-rst]'); if (!b) return;
     e.preventDefault();
     var lk = b.getAttribute('data-rst'); var parts = lk.split(':');

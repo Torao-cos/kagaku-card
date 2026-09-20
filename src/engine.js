@@ -21,10 +21,10 @@
   /* ===================== 定数 ===================== */
   var CONFIG = {
     W_INIT: 1.0,
-    W_O: 0.5,        // ○: 重み × 0.5
-    W_X: 2.0,        // ×: 重み × 2.0（答え欄タップで次へ進んだ時も × 扱い）
+    W_O: 0.5,        // 覚えた(○): 重み × 0.5（出にくくなる）
     W_MIN: 0.1,
-    W_MAX: 8.0,
+    // ×（答え面タップ・左スワイプで次へ進む＝覚えていない扱い）は重みを W_INIT に戻すだけで、上げない（owner決定 2026-09-20）
+    // → 状態は実質3つ: 未(1.0) / ○1回(0.5) / ○2回(覚えた=非表示)
     COOLDOWN_RATIO: 0.3,   // 直近 floor(0.3 × 候補数) 枚は出さない
     HIDE_STREAK: 2,        // 連続○ 2回で「覚えた」＝出なくなる
     STREAK_ONCE_PER_DAY: false,  // true にすると連続○カウントは1日1回まで（=最低2日かかる）。owner指示で既定 false（2026-09-20）
@@ -251,7 +251,7 @@
     return { w: any ? w : CONFIG.W_INIT, grad: any ? grad : false };
   }
 
-  function clamp(w) { return Math.min(CONFIG.W_MAX, Math.max(CONFIG.W_MIN, w)); }
+  function clamp(w) { return Math.min(CONFIG.W_INIT, Math.max(CONFIG.W_MIN, w)); }
 
   /**
    * ○× を適用（SPEC §5.3）。mark ∈ 'o' | 'x'。today = 'YYYY-MM-DD'（STREAK_ONCE_PER_DAY 用）。
@@ -270,7 +270,7 @@
         if (s.streak >= CONFIG.HIDE_STREAK) s.grad = true;
         s.o += 1;
       } else {
-        s.w = clamp(s.w * CONFIG.W_X);
+        s.w = CONFIG.W_INIT;      // 基準値に戻す（○の割引を取り消す）。上げはしない
         s.streak = 0;
         s.grad = false;
         s.x += 1;
@@ -358,6 +358,38 @@
     return { total: total, grad: grad };
   }
 
+  /** カード1枚のリセット（dir 省略で両方向）＝状態を消して「未」に戻す */
+  function resetCard(store, cardIdStr, dir) {
+    (dir ? [dir] : DIRS).forEach(function (d) { delete store.items[itemKey(cardIdStr, d)]; });
+  }
+
+  /**
+   * レベル内のカード一覧（別画面用）。dirs で指定した方向の状態をまとめる。
+   * 戻り値: [{ card, grad(全方向で覚えた), any(何か記録あり), states: {sn:{...}, ns:{...}} }] — 覚えた → 覚えた×1 → 記録あり → 未 の順
+   */
+  function cardList(cards, store, lk, dirs) {
+    var ds = dirs || DIRS;
+    var out = cards.filter(function (c) { return levelKey(c) === lk; }).map(function (c) {
+      var states = {}, grad = true, any = false;
+      ds.forEach(function (d) {
+        var k = itemKey(c.id, d);
+        states[d] = store.items[k] || null;
+        if (states[d]) any = true;
+        if (!states[d] || !states[d].grad) grad = false;
+      });
+      return { card: c, grad: grad, any: any, states: states };
+    });
+    // 並び: 覚えた → 覚えた×1（streak≥1）→ 記録あり（×のみ）→ 未
+    function rank(r) {
+      if (r.grad) return 0;
+      var st = 0; Object.keys(r.states).forEach(function (d) { if (r.states[d] && r.states[d].streak > st) st = r.states[d].streak; });
+      if (st >= 1) return 1;
+      return r.any ? 2 : 3;
+    }
+    out.sort(function (a, b) { return rank(a) - rank(b); });
+    return out;
+  }
+
   /** レベル×方向のリセット（dir 省略で両方向） */
   function resetLevel(store, cards, lk, dir) {
     var dirs = dir ? [dir] : DIRS;
@@ -393,6 +425,6 @@
     emptyStore: emptyStore, freshState: freshState, getState: getState, itemState: itemState,
     applyMark: applyMark, undoMark: undoMark,
     makeRng: makeRng, cooldownFor: cooldownFor, pickNext: pickNext,
-    progress: progress, summary: summary, resetLevel: resetLevel, levelList: levelList
+    progress: progress, summary: summary, resetLevel: resetLevel, resetCard: resetCard, cardList: cardList, levelList: levelList
   };
 });

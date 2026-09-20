@@ -137,14 +137,16 @@ t('STREAK_ONCE_PER_DAY=true なら同日2連続では覚えたにならない（
     assert.strictEqual(E.itemState(st, it).grad, true);
   } finally { E.CONFIG.STREAK_ONCE_PER_DAY = prev; }
 });
-t('× は streak と覚えたを解除、重み×2', () => {
+t('× は streak と覚えたを解除、重みは基準1.0に戻す（上げない）', () => {
   const st = E.emptyStore(); const it = mkItem('a');
   E.applyMark(st, it, 'o', 'd1'); E.applyMark(st, it, 'o', 'd1');
   assert.ok(E.itemState(st, it).grad);
   E.applyMark(st, it, 'x', 'd1');
   const s = E.getState(st, 'a', 'sn');
   assert.strictEqual(s.grad, false); assert.strictEqual(s.streak, 0);
-  assert.ok(Math.abs(s.w - 0.5) < 1e-9, 'w=' + s.w);   // 1.0*0.5*0.5=0.25 → ×2 = 0.5
+  assert.strictEqual(s.w, 1.0);
+  E.applyMark(st, it, 'x', 'd1'); E.applyMark(st, it, 'x', 'd1');
+  assert.strictEqual(E.getState(st, 'a', 'sn').w, 1.0, '× を重ねても 1.0 を超えない');
 });
 t('○→×→○ は連続でないので覚えたにならない', () => {
   const st = E.emptyStore(); const it = mkItem('a');
@@ -152,12 +154,30 @@ t('○→×→○ は連続でないので覚えたにならない', () => {
   assert.strictEqual(E.getState(st, 'a', 'sn').streak, 1);
   assert.strictEqual(E.itemState(st, it).grad, false);
 });
-t('重みの上下限', () => {
+t('重みの下限 0.1', () => {
   const st = E.emptyStore(); const it = mkItem('a');
-  for (let i = 0; i < 10; i++) E.applyMark(st, it, 'x', '2026-09-20');
-  assert.strictEqual(E.getState(st, 'a', 'sn').w, 8.0);
   for (let i = 0; i < 20; i++) E.applyMark(st, it, 'o', '2026-09-20');
   assert.ok(Math.abs(E.getState(st, 'a', 'sn').w - 0.1) < 1e-9);
+});
+t('resetCard で1枚だけ未に戻る', () => {
+  const st = E.emptyStore();
+  E.applyMark(st, mkItem('a'), 'o', 'd1'); E.applyMark(st, mkItem('a'), 'o', 'd1');
+  E.applyMark(st, mkItem('b'), 'o', 'd1');
+  E.resetCard(st, 'a', 'sn');
+  assert.strictEqual(st.items['a|sn'], undefined);
+  assert.strictEqual(st.items['b|sn'].streak, 1);
+});
+t('cardList: 覚えた → 記録あり → 未 の順', () => {
+  const st = E.emptyStore();
+  const lv2 = cards.filter((c) => c.category === '元素記号' && c.level === 2);
+  E.applyMark(st, { key: 'k', dir: 'sn', cardIds: [lv2[3].id] }, 'o', 'd1');
+  E.applyMark(st, { key: 'k', dir: 'sn', cardIds: [lv2[3].id] }, 'o', 'd1');
+  E.applyMark(st, { key: 'k', dir: 'sn', cardIds: [lv2[5].id] }, 'o', 'd1');
+  const list = E.cardList(cards, st, '元素記号:2', ['sn']);
+  assert.strictEqual(list.length, 7);
+  assert.strictEqual(list[0].card.id, lv2[3].id); assert.ok(list[0].grad);
+  assert.strictEqual(list[1].card.id, lv2[5].id); assert.ok(list[1].any && !list[1].grad);
+  assert.ok(!list[2].any);
 });
 t('undoMark で押し直し', () => {
   const st = E.emptyStore(); const it = mkItem('a');
@@ -216,18 +236,19 @@ t('ON: 覚えた済みは出ない／全部覚えたで null', () => {
   // OFF なら全部出る
   assert.ok(E.pickNext(items, st, [], false, rng) !== null);
 });
-t('ON: 重い（×した）カードほど多く出る', () => {
+t('ON: ○1回（0.5）のカードは未（1.0）のカードより出にくい・×は未と同じ', () => {
   const items = E.buildItems(E.selectCards(cards, ['化学式:2']), ['sn']);   // 14枚
   const st = E.emptyStore(); const rng = E.makeRng(11);
-  const hard = items[0], easy = items[1];
-  for (let i = 0; i < 3; i++) E.applyMark(st, hard, 'x', 'd1');   // w=8
-  E.applyMark(st, easy, 'o', 'd1');   // w=0.5（2回○すると覚えた扱いで出なくなるので1回だけ）
+  const once = items[0], crossed = items[1], fresh = items[2];
+  E.applyMark(st, once, 'o', 'd1');        // w=0.5
+  E.applyMark(st, crossed, 'x', 'd1');     // w=1.0
   const cnt = {}; const recent = [];
-  for (let i = 0; i < 5000; i++) {
+  for (let i = 0; i < 14000; i++) {
     const it = E.pickNext(items, st, recent, true, rng);
     cnt[it.key] = (cnt[it.key] || 0) + 1; recent.push(it.key);
   }
-  assert.ok(cnt[hard.key] > cnt[easy.key] * 3, 'hard=' + cnt[hard.key] + ' easy=' + cnt[easy.key]);
+  assert.ok(cnt[fresh.key] > cnt[once.key] * 1.5, 'fresh=' + cnt[fresh.key] + ' once=' + cnt[once.key]);
+  assert.ok(Math.abs(cnt[crossed.key] / cnt[fresh.key] - 1) < 0.15, 'crossed=' + cnt[crossed.key] + ' fresh=' + cnt[fresh.key]);
 });
 t('OFF: 一様（重みを無視）', () => {
   const items = E.buildItems(E.selectCards(cards, ['化学式:2']), ['sn']);
