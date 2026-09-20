@@ -176,9 +176,11 @@ node tools/import-list.js 元素記号 input.txt >> data/cards.csv
 
 ## 8. 配布・インフラ
 
-- **配信**: Cloudflare Workers（Static Assets）。アカウント `jiyuunatorao@gmail.com`。Pages は使わない（Cloudflare が Workers へ投資を一本化・2025-04公式）
-- **ソース**: GitHub public リポジトリ（`Torao-cos`）。ホスティングには使わない
-- **更新手順（1コマンド）**: `npm run ship` = 検証 → ビルド → デプロイ
+- **配信（現状・2026-09-20）**: Cloudflare **Pages** プロジェクト `kagaku-card` → **https://kagaku-card.pages.dev/**。アカウント `jiyuunatorao@gmail.com`
+  - 本命は Workers（Static Assets）だったが、手元の API トークンが Pages:Edit スコープのみで Workers 経路が認証エラー → wrangler の案内どおり旧 Pages 経路（`--force` で作成）に置いた。静的ファイルだけなので Workers への移行は「Workers 権限つきトークンを1本作る → `wrangler deploy`」で完了する（生徒側のURLは変わるので配り直しが要る＝移行するなら早いうちに）
+  - `wrangler.jsonc` は Workers 用に残してある。Pages デプロイは `tools/deploy.js` が dist を一時ディレクトリにコピーして実行する（同じ場所に wrangler.jsonc があると Pages が拒否するため）
+- **ソース**: GitHub public リポジトリ（`Torao-cos/kagaku-card`・作成待ち＝GitHub認証がClaude側に無いためownerの1操作が要る）。ホスティングには使わない
+- **更新手順（1コマンド）**: `npm run ship` = テスト → 検証・ビルド → デプロイ。認証情報は git 管理外のファイル（`tools/deploy.js` 冒頭参照）
 
 ## 9. やらないこと（初版）
 

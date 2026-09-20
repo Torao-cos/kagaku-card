@@ -8,7 +8,7 @@
     "test": "node test/engine.test.js",
     "build": "node build.js",
     "serve": "node tools/serve.js",
-    "deploy": "npx wrangler deploy",
+    "deploy": "node tools/deploy.js",
     "ship": "npm test && npm run build && npm run deploy"
   },
   "license": "MIT"
