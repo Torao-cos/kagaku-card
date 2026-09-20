@@ -22,12 +22,12 @@
   var CONFIG = {
     W_INIT: 1.0,
     W_O: 0.5,        // ○: 重み × 0.5
-    W_T: 1.2,        // △: 重み × 1.2
-    W_X: 2.0,        // ×: 重み × 2.0
+    W_X: 2.0,        // ×: 重み × 2.0（答え欄タップで次へ進んだ時も × 扱い）
     W_MIN: 0.1,
     W_MAX: 8.0,
     COOLDOWN_RATIO: 0.3,   // 直近 floor(0.3 × 候補数) 枚は出さない
-    GRAD_STREAK: 2,        // 連続○ 2回で卒業
+    HIDE_STREAK: 2,        // 連続○ 2回で「覚えた」＝出なくなる
+    STREAK_ONCE_PER_DAY: false,  // true にすると連続○カウントは1日1回まで（=最低2日かかる）。owner指示で既定 false（2026-09-20）
     HISTORY_MAX: 50        // スワイプで戻れる枚数
   };
 
@@ -228,18 +228,18 @@
   function emptyStore() {
     return {
       version: 1,
-      settings: { dir: 'sn', freq: false, levels: [], bannerDismissed: false },
+      settings: { dir: 'sn', freq: true, levels: [], bannerDismissed: false },   // 頻度調整は既定 ON（owner指示 2026-09-20）
       items: {}
     };
   }
 
-  function freshState() { return { w: CONFIG.W_INIT, streak: 0, day: '', grad: false, o: 0, t: 0, x: 0 }; }
+  function freshState() { return { w: CONFIG.W_INIT, streak: 0, day: '', grad: false, o: 0, x: 0 }; }   // grad = 「覚えた」(非表示)
 
   function getState(store, id, dir) {
     return store.items[itemKey(id, dir)] || freshState();
   }
 
-  /** 統合アイテムの集約状態: w = 最大, grad = 全部卒業 */
+  /** 統合アイテムの集約状態: w = 最大, grad = 全部「覚えた」 */
   function itemState(store, item) {
     var w = 0, grad = true, any = false;
     item.cardIds.forEach(function (id) {
@@ -254,7 +254,7 @@
   function clamp(w) { return Math.min(CONFIG.W_MAX, Math.max(CONFIG.W_MIN, w)); }
 
   /**
-   * ○△× を適用（SPEC §5.3）。mark ∈ 'o' | 't' | 'x'。today = 'YYYY-MM-DD'。
+   * ○× を適用（SPEC §5.3）。mark ∈ 'o' | 'x'。today = 'YYYY-MM-DD'（STREAK_ONCE_PER_DAY 用）。
    * 戻り値: undo 用のスナップショット {key: 直前state} — undoMark に渡す。
    */
   function applyMark(store, item, mark, today) {
@@ -266,13 +266,9 @@
       var s = JSON.parse(JSON.stringify(prev));
       if (mark === 'o') {
         s.w = clamp(s.w * CONFIG.W_O);
-        if (s.day !== today) { s.streak += 1; s.day = today; }
-        if (s.streak >= CONFIG.GRAD_STREAK) s.grad = true;
+        if (!CONFIG.STREAK_ONCE_PER_DAY || s.day !== today) { s.streak += 1; s.day = today; }
+        if (s.streak >= CONFIG.HIDE_STREAK) s.grad = true;
         s.o += 1;
-      } else if (mark === 't') {
-        s.w = clamp(s.w * CONFIG.W_T);
-        s.streak = 0;
-        s.t += 1;
       } else {
         s.w = clamp(s.w * CONFIG.W_X);
         s.streak = 0;
@@ -314,7 +310,7 @@
    * 次のアイテムを選ぶ。
    *  items: buildItems の結果／store: 状態／recentKeys: 直近に出した item.key の配列（新しいものが末尾）
    *  freq: 頻度調整 ON(true)/OFF(false)／rng
-   * 戻り値: item ／ null（頻度調整ONで候補ゼロ = 全部卒業）
+   * 戻り値: item ／ null（頻度調整ONで候補ゼロ = 全部「覚えた」）
    */
   function pickNext(items, store, recentKeys, freq, rng) {
     rng = rng || defaultRng;

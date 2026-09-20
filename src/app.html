@@ -105,11 +105,9 @@
   .marks{flex:none;display:flex;gap:10px;padding:0 10px 10px}
   .marks button{flex:1;height:60px;border-radius:14px;border:2px solid var(--line);background:var(--card);font-size:30px;font-weight:700;color:var(--fg)}
   .marks button.o{color:var(--ok);border-color:var(--ok)}
-  .marks button.t{color:var(--so);border-color:var(--so)}
   .marks button.x{color:var(--ng);border-color:var(--ng)}
   .marks button.sel{color:#fff}
   .marks button.o.sel{background:var(--ok)}
-  .marks button.t.sel{background:var(--so)}
   .marks button.x.sel{background:var(--ng)}
   .marks button:active{transform:scale(.97)}
   @media (orientation: landscape){
@@ -134,9 +132,9 @@
     <h2>使い方</h2>
     <ul class="howto">
       <li><b>問題の面</b>をタップ → 答えが1つずつ開く（ヒント）</li>
-      <li><b>答えの面</b>をタップ → 答えが全部出る</li>
-      <li><b>左にスワイプ</b> → 次のカード／<b>右にスワイプ</b> → 前のカード</li>
-      <li><b>頻度調整ON</b>：○△×で出る回数が変わる。<b>2日続けて○</b>なら卒業して出なくなる（試験前はOFFにすると全部出る）</li>
+      <li><b>答えの面</b>をタップ → 答えが全部出る。<b>もう一度タップ → 次のカード</b>（頻度調整ONのときは × 扱い）</li>
+      <li><b>左にスワイプ</b> → 次のカード／<b>右にスワイプ</b> → 前のカード（○×を押し直せる）</li>
+      <li><b>頻度調整</b>（はじめはON）：○×で出る回数が変わる。<b>2回続けて○</b>にしたカードは「覚えた」になり、出なくなる。試験前に全部見たいときはOFFに</li>
     </ul>
   </div>
 
@@ -153,7 +151,7 @@
       <button data-dir="mix">ミックス</button>
     </div>
     <div class="row" style="margin-top:14px">
-      <div><h2 style="margin:0">頻度調整</h2><div class="muted" id="freq-desc">OFF：全部のカードが均等に出る</div></div>
+      <div><h2 style="margin:0">頻度調整</h2><div class="muted" id="freq-desc"></div></div>
       <button class="switch" id="sw-freq" role="switch" aria-checked="false" aria-label="頻度調整"></button>
     </div>
     <div class="sum" id="sum"></div>
@@ -183,13 +181,12 @@
   </div>
   <div class="marks hidden" id="marks">
     <button class="o" data-m="o" aria-label="覚えた">○</button>
-    <button class="t" data-m="t" aria-label="あやしい">△</button>
     <button class="x" data-m="x" aria-label="わからない">×</button>
   </div>
   <div class="overlay hidden" id="done">
     <div class="box">
-      <h3>この範囲は全部卒業！</h3>
-      <p>範囲を増やす、リセットする、または頻度調整をOFFにすると全部のカードが出ます。</p>
+      <h3>この範囲は全部「覚えた」になりました</h3>
+      <p>範囲を増やす、リセットする、または頻度調整をOFFにすると、また全部のカードが出ます。</p>
       <button class="btn" id="btn-done-top">トップへ</button>
     </div>
   </div>
@@ -231,14 +228,14 @@
     var d = store.settings.dir, f = !!store.settings.freq;
     Array.prototype.forEach.call($('seg-dir').children, function (b) { b.classList.toggle('on', b.getAttribute('data-dir') === d); });
     $('sw-freq').classList.toggle('on', f); $('sw-freq').setAttribute('aria-checked', String(f));
-    $('freq-desc').textContent = f ? 'ON：○△×で出る回数が変わる・卒業したカードは出ない' : 'OFF：全部のカードが均等に出る';
+    $('freq-desc').textContent = f ? 'ON：○×で出る回数が変わる・2回続けて○のカードは出ない' : 'OFF：全部のカードが均等に出る（○×なし）';
 
     // 全体概要
     var sumHtml = '';
     dirs().forEach(function (dd) {
       var s = E.summary(CARDS, store, store.settings.levels, dd);
       var pct = s.total ? Math.round(100 * s.grad / s.total) : 0;
-      sumHtml += '<div class="sumline"><span>' + (dirs().length > 1 ? E.DIR_LABEL[dd] + '　' : '') + '卒業</span><span>' + s.grad + ' / ' + s.total + '</span></div>' +
+      sumHtml += '<div class="sumline"><span>' + (dirs().length > 1 ? E.DIR_LABEL[dd] + '　' : '') + '覚えた</span><span>' + s.grad + ' / ' + s.total + '</span></div>' +
         '<div class="bar"><i style="width:' + pct + '%"></i></div>';
     });
     $('sum').innerHTML = sumHtml;
@@ -333,8 +330,9 @@
     var h = current(); if (!h) return;
     var n = E.tokenize(h.item.answer).length;
     if (h.revealed < n) { h.revealed = n; h.revealedAt = Date.now(); render(); return; }
-    // 全表示済みで答え面をタップ → 頻度調整OFFなら次へ（全表示から300msは無効）
-    if (!store.settings.freq && Date.now() - h.revealedAt > 300) next();
+    // 全表示済みで答え面をもう一度タップ → 次へ。頻度調整ONなら × 扱い（全表示から300msは無効＝連打の誤爆防止）
+    if (Date.now() - h.revealedAt <= 300) return;
+    if (store.settings.freq) mark('x'); else next();
   }
   function mark(m) {
     var h = current(); if (!h) return;
@@ -372,7 +370,7 @@
     if (!S || $('card').classList.contains('hidden')) return;
     if (e.key === 'ArrowLeft') prev(); else if (e.key === 'ArrowRight') next();
     else if (e.key === 'h') hint(); else if (e.key === ' ') { e.preventDefault(); revealAll(); }
-    else if (e.key === '1') mark('o'); else if (e.key === '2') mark('t'); else if (e.key === '3') mark('x');
+    else if (e.key === '1') mark('o'); else if (e.key === '2') mark('x');
   });
 
   /* ===================== トップの操作 ===================== */

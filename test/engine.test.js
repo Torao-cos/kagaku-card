@@ -117,32 +117,40 @@ t('アイテム数 全範囲 sn', () => {
   assert.strictEqual(items.length, 95);
 });
 
-/* ---------- ○△× と卒業（SPEC §5.3） ---------- */
+/* ---------- ○× と「覚えた」（SPEC §5.3） ---------- */
 function mkItem(id) { return { key: 'k' + id, dir: 'sn', cardIds: [id] }; }
-t('○ 1日1回制限 → 同日2連続では卒業しない', () => {
+t('○ 2回続けて → 覚えた（同日でもよい・既定）', () => {
   const st = E.emptyStore(); const it = mkItem('a');
   E.applyMark(st, it, 'o', '2026-09-20');
-  E.applyMark(st, it, 'o', '2026-09-20');
-  assert.strictEqual(E.getState(st, 'a', 'sn').streak, 1);
   assert.strictEqual(E.itemState(st, it).grad, false);
-  E.applyMark(st, it, 'o', '2026-09-21');
+  E.applyMark(st, it, 'o', '2026-09-20');
+  assert.strictEqual(E.getState(st, 'a', 'sn').streak, 2);
   assert.strictEqual(E.itemState(st, it).grad, true);
 });
-t('× は streak と卒業を解除、重み×2', () => {
+t('STREAK_ONCE_PER_DAY=true なら同日2連続では覚えたにならない（フラグで戻せる）', () => {
+  const prev = E.CONFIG.STREAK_ONCE_PER_DAY; E.CONFIG.STREAK_ONCE_PER_DAY = true;
+  try {
+    const st = E.emptyStore(); const it = mkItem('a');
+    E.applyMark(st, it, 'o', '2026-09-20'); E.applyMark(st, it, 'o', '2026-09-20');
+    assert.strictEqual(E.getState(st, 'a', 'sn').streak, 1);
+    E.applyMark(st, it, 'o', '2026-09-21');
+    assert.strictEqual(E.itemState(st, it).grad, true);
+  } finally { E.CONFIG.STREAK_ONCE_PER_DAY = prev; }
+});
+t('× は streak と覚えたを解除、重み×2', () => {
   const st = E.emptyStore(); const it = mkItem('a');
-  E.applyMark(st, it, 'o', '2026-09-20'); E.applyMark(st, it, 'o', '2026-09-21');
+  E.applyMark(st, it, 'o', 'd1'); E.applyMark(st, it, 'o', 'd1');
   assert.ok(E.itemState(st, it).grad);
-  E.applyMark(st, it, 'x', '2026-09-22');
+  E.applyMark(st, it, 'x', 'd1');
   const s = E.getState(st, 'a', 'sn');
   assert.strictEqual(s.grad, false); assert.strictEqual(s.streak, 0);
   assert.ok(Math.abs(s.w - 0.5) < 1e-9, 'w=' + s.w);   // 1.0*0.5*0.5=0.25 → ×2 = 0.5
 });
-t('△ は streak リセット・重み×1.2', () => {
+t('○→×→○ は連続でないので覚えたにならない', () => {
   const st = E.emptyStore(); const it = mkItem('a');
-  E.applyMark(st, it, 'o', '2026-09-20');
-  E.applyMark(st, it, 't', '2026-09-20');
-  const s = E.getState(st, 'a', 'sn');
-  assert.strictEqual(s.streak, 0); assert.ok(Math.abs(s.w - 0.6) < 1e-9);
+  E.applyMark(st, it, 'o', 'd1'); E.applyMark(st, it, 'x', 'd1'); E.applyMark(st, it, 'o', 'd1');
+  assert.strictEqual(E.getState(st, 'a', 'sn').streak, 1);
+  assert.strictEqual(E.itemState(st, it).grad, false);
 });
 t('重みの上下限', () => {
   const st = E.emptyStore(); const it = mkItem('a');
@@ -161,9 +169,9 @@ t('undoMark で押し直し', () => {
 });
 t('統合アイテム: 全構成カードに適用・grad は全部で判定', () => {
   const st = E.emptyStore(); const it = { key: 'k', dir: 'sn', cardIds: ['a', 'b'] };
-  E.applyMark(st, it, 'o', '2026-09-20'); E.applyMark(st, it, 'o', '2026-09-21');
+  E.applyMark(st, it, 'o', 'd1'); E.applyMark(st, it, 'o', 'd1');
   assert.ok(E.getState(st, 'a', 'sn').grad && E.getState(st, 'b', 'sn').grad);
-  E.applyMark(st, mkItem('b'), 'x', '2026-09-22');
+  E.applyMark(st, mkItem('b'), 'x', 'd1');
   assert.strictEqual(E.itemState(st, it).grad, false);
   assert.strictEqual(E.itemState(st, it).w, E.getState(st, 'b', 'sn').w);   // 最大
 });
@@ -197,7 +205,7 @@ t('クールダウン: 7枚範囲でも同じカードが連続しない（ON）
     recent.push(it.key);
   }
 });
-t('ON: 卒業済みは出ない／全部卒業で null', () => {
+t('ON: 覚えた済みは出ない／全部覚えたで null', () => {
   const items = E.buildItems(E.selectCards(cards, ['元素記号:2']), ['sn']);
   const st = E.emptyStore();
   items.slice(0, 6).forEach((it) => { E.applyMark(st, it, 'o', 'd1'); E.applyMark(st, it, 'o', 'd2'); });
@@ -213,7 +221,7 @@ t('ON: 重い（×した）カードほど多く出る', () => {
   const st = E.emptyStore(); const rng = E.makeRng(11);
   const hard = items[0], easy = items[1];
   for (let i = 0; i < 3; i++) E.applyMark(st, hard, 'x', 'd1');   // w=8
-  for (let i = 0; i < 3; i++) E.applyMark(st, easy, 'o', 'd1');   // w=0.125
+  E.applyMark(st, easy, 'o', 'd1');   // w=0.5（2回○すると覚えた扱いで出なくなるので1回だけ）
   const cnt = {}; const recent = [];
   for (let i = 0; i < 5000; i++) {
     const it = E.pickNext(items, st, recent, true, rng);
