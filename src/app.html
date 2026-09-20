@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#1f4f8f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="化学カード">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<title>元素記号・化学式カード</title>
+<!--
+  app.html — build.js がプレースホルダを差し替えて dist/index.html を作る（単一ファイル・外部読込ゼロ）。
+  仕様の正本は ../SPEC.md。カード画面に説明文は置かない（使い方はトップだけ）。
+-->
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#fff; --fg:#171a1f; --muted:#6b7280; --line:#e2e5ea;
+    --accent:#1f4f8f; --accent-d:#173d70; --tap:#eef2f7;
+    --face-bg:#fff; --ans-bg:#f2f6fb; --blank:#c3cad6;
+    --ok:#1a9c62; --so:#d9a400; --ng:#d94848;
+    --bar:#e2e5ea; --bar-fill:#1a9c62;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#111418; --card:#1a1f26; --fg:#e8ebf0; --muted:#9aa3b2; --line:#2a313b;
+      --accent:#5b8fd6; --accent-d:#4a79b8; --tap:#232a33;
+      --face-bg:#1a1f26; --ans-bg:#20272f; --blank:#4a5461;
+      --bar:#2a313b;
+    }
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0;height:100%}
+  body{
+    background:var(--bg); color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Hiragino Sans","Noto Sans JP","Yu Gothic UI","Meiryo",sans-serif;
+    font-size:16px; line-height:1.6; -webkit-text-size-adjust:100%;
+    overscroll-behavior:none;
+  }
+  .hidden{display:none !important}
+  button{font-family:inherit;cursor:pointer}
+  sub{font-size:.6em;line-height:0;vertical-align:-0.25em}
+
+  /* ===== トップ ===== */
+  #top{max-width:560px;margin:0 auto;padding:14px max(14px,env(safe-area-inset-left)) 40px}
+  h1{font-size:21px;margin:6px 0 10px;letter-spacing:.02em}
+  h2{font-size:14px;margin:0 0 8px;color:var(--muted);font-weight:600}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+  .howto{font-size:14px;color:var(--fg);margin:0;padding-left:1.2em}
+  .howto li{margin:2px 0}
+  .muted{color:var(--muted);font-size:13px}
+  .btn{display:block;width:100%;border:none;border-radius:12px;padding:16px;font-size:17px;font-weight:700;background:var(--accent);color:#fff}
+  .btn:active{background:var(--accent-d)}
+  .btn:disabled{opacity:.45}
+  .btn.sub{background:var(--tap);color:var(--fg);font-weight:600;border:1px solid var(--line)}
+  .btn.warn{background:transparent;color:var(--ng);border:1px solid var(--ng);font-weight:600;font-size:15px;padding:12px}
+  .seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .seg button{flex:1;border:none;background:var(--card);color:var(--fg);padding:11px 4px;font-size:14px;font-weight:600}
+  .seg button+button{border-left:1px solid var(--line)}
+  .seg button.on{background:var(--accent);color:#fff}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .switch{position:relative;width:52px;height:30px;border-radius:15px;background:var(--line);border:none;flex:none;transition:background .15s}
+  .switch::after{content:"";position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:12px;background:#fff;transition:left .15s;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+  .switch.on{background:var(--ok)}
+  .switch.on::after{left:25px}
+  .sum{margin-top:8px}
+  .bar{height:12px;border-radius:6px;background:var(--bar);overflow:hidden}
+  .bar>i{display:block;height:100%;background:var(--bar-fill);width:0;transition:width .25s}
+  .bar.thin{height:7px}
+  .sumline{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-bottom:3px}
+  .lvl{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line)}
+  .lvl:first-of-type{border-top:none}
+  .lvl input{width:22px;height:22px;flex:none;accent-color:var(--accent)}
+  .lvl .name{flex:none;width:6.5em;font-weight:600;font-size:15px}
+  .lvl .bars{flex:1;min-width:0}
+  .lvl .bars .bar+.bar{margin-top:3px}
+  .lvl .num{flex:none;font-size:12px;color:var(--muted);min-width:3.6em;text-align:right;font-variant-numeric:tabular-nums}
+  .lvl .rst{flex:none;border:1px solid var(--line);background:var(--card);color:var(--muted);border-radius:8px;font-size:12px;padding:5px 7px}
+  .banner{display:flex;gap:8px;align-items:flex-start;background:var(--tap);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:13px}
+  .banner p{margin:0;flex:1}
+  .banner button{border:none;background:transparent;font-size:20px;line-height:1;color:var(--muted);padding:0 4px}
+  .ver{text-align:center;font-size:11px;color:var(--muted);margin-top:18px}
+
+  /* ===== カード ===== */
+  #card{position:fixed;inset:0;display:flex;flex-direction:column;background:var(--bg);
+        padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}
+  .topbar{flex:none;display:flex;align-items:center;justify-content:space-between;height:48px;padding:0 8px}
+  .topbar button{border:none;background:transparent;color:var(--accent);font-size:15px;font-weight:600;padding:8px 10px;border-radius:8px}
+  .topbar button:active{background:var(--tap)}
+  .topbar .pos{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .body{flex:1;display:flex;flex-direction:column;min-height:0;padding:0 10px 10px;gap:10px}
+  .face{flex:1;display:flex;align-items:center;justify-content:center;text-align:center;
+        border-radius:16px;border:1px solid var(--line);padding:12px 14px;min-height:0;
+        user-select:none;-webkit-user-select:none;overflow:hidden;word-break:break-all;overflow-wrap:anywhere}
+  #q{background:var(--face-bg)}
+  #a{background:var(--ans-bg)}
+  .face .txt{line-height:1.25}
+  .face.formula .txt{font-size:clamp(40px,13vw,80px);font-weight:700;letter-spacing:.01em;font-family:"Helvetica Neue",Arial,"Noto Sans JP",sans-serif}
+  .face.jp .txt{font-size:clamp(28px,8.5vw,52px);font-weight:700}
+  .face .blank{color:var(--blank);margin:0 1px}
+  .face .note{display:block;margin-top:10px;font-size:14px;font-weight:400;color:var(--muted)}
+  .marks{flex:none;display:flex;gap:10px;padding:0 10px 10px}
+  .marks button{flex:1;height:60px;border-radius:14px;border:2px solid var(--line);background:var(--card);font-size:30px;font-weight:700;color:var(--fg)}
+  .marks button.o{color:var(--ok);border-color:var(--ok)}
+  .marks button.t{color:var(--so);border-color:var(--so)}
+  .marks button.x{color:var(--ng);border-color:var(--ng)}
+  .marks button.sel{color:#fff}
+  .marks button.o.sel{background:var(--ok)}
+  .marks button.t.sel{background:var(--so)}
+  .marks button.x.sel{background:var(--ng)}
+  .marks button:active{transform:scale(.97)}
+  @media (orientation: landscape){
+    .body{flex-direction:row}
+    .marks button{height:52px;font-size:26px}
+    .face.formula .txt{font-size:clamp(36px,9vh,72px)}
+    .face.jp .txt{font-size:clamp(24px,6.5vh,44px)}
+  }
+  .overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg);padding:24px}
+  .overlay .box{max-width:360px;width:100%;text-align:center}
+  .overlay h3{font-size:22px;margin:0 0 8px}
+  .overlay p{color:var(--muted);font-size:14px;margin:0 0 18px}
+</style>
+</head>
+<body>
+
+<!-- ===== トップ ===== -->
+<div id="top">
+  <h1>元素記号・化学式カード</h1>
+
+  <div class="card">
+    <h2>使い方</h2>
+    <ul class="howto">
+      <li><b>問題の面</b>をタップ → 答えが1つずつ開く（ヒント）</li>
+      <li><b>答えの面</b>をタップ → 答えが全部出る</li>
+      <li><b>左にスワイプ</b> → 次のカード／<b>右にスワイプ</b> → 前のカード</li>
+      <li><b>頻度調整ON</b>：○△×で出る回数が変わる。<b>2日続けて○</b>なら卒業して出なくなる（試験前はOFFにすると全部出る）</li>
+    </ul>
+  </div>
+
+  <div id="banner" class="banner hidden">
+    <p>ホーム画面に追加すると、アプリのように開けます（ブラウザのメニューから「ホーム画面に追加」）。</p>
+    <button id="banner-close" aria-label="閉じる">&times;</button>
+  </div>
+
+  <div class="card">
+    <div class="row"><h2 style="margin:0">方向</h2></div>
+    <div class="seg" id="seg-dir">
+      <button data-dir="sn">記号 → 名称</button>
+      <button data-dir="ns">名称 → 記号</button>
+      <button data-dir="mix">ミックス</button>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <div><h2 style="margin:0">頻度調整</h2><div class="muted" id="freq-desc">OFF：全部のカードが均等に出る</div></div>
+      <button class="switch" id="sw-freq" role="switch" aria-checked="false" aria-label="頻度調整"></button>
+    </div>
+    <div class="sum" id="sum"></div>
+  </div>
+
+  <div class="card">
+    <h2>出題範囲（複数選べる）</h2>
+    <div id="levels"></div>
+  </div>
+
+  <button class="btn" id="btn-start">はじめる</button>
+  <div style="height:22px"></div>
+  <button class="btn warn" id="btn-reset-all">学習記録を全部リセット</button>
+  <div class="ver">v__VERSION__</div>
+</div>
+
+<!-- ===== カード ===== -->
+<div id="card" class="hidden">
+  <div class="topbar">
+    <button id="btn-top">‹ トップ</button>
+    <span class="pos" id="pos"></span>
+    <button id="btn-latest" class="hidden">最新へ ⇥</button>
+  </div>
+  <div class="body" id="body">
+    <div class="face" id="q"><div class="txt" id="q-txt"></div></div>
+    <div class="face" id="a"><div class="txt" id="a-txt"></div></div>
+  </div>
+  <div class="marks hidden" id="marks">
+    <button class="o" data-m="o" aria-label="覚えた">○</button>
+    <button class="t" data-m="t" aria-label="あやしい">△</button>
+    <button class="x" data-m="x" aria-label="わからない">×</button>
+  </div>
+  <div class="overlay hidden" id="done">
+    <div class="box">
+      <h3>この範囲は全部卒業！</h3>
+      <p>範囲を増やす、リセットする、または頻度調整をOFFにすると全部のカードが出ます。</p>
+      <button class="btn" id="btn-done-top">トップへ</button>
+    </div>
+  </div>
+</div>
+
+<script>/*__ENGINE__*/</script>
+<script>
+(function () {
+  'use strict';
+  var E = window.KagakuEngine;
+  var DATA = "__DATA__";
+  var CARDS = DATA.map(E.normalizeCard);
+  var LEVELS = E.levelList(CARDS);
+  var KEY = 'kagaku-card-v1';
+  var $ = function (id) { return document.getElementById(id); };
+
+  /* ===================== 保存 ===================== */
+  function load() {
+    try {
+      var s = JSON.parse(localStorage.getItem(KEY) || 'null');
+      if (s && s.version === 1 && s.settings && s.items) {
+        if (['sn', 'ns', 'mix'].indexOf(s.settings.dir) < 0) s.settings.dir = 'sn';
+        if (!Array.isArray(s.settings.levels)) s.settings.levels = [];
+        return s;
+      }
+    } catch (e) { /* 壊れていたら初期化 */ }
+    return E.emptyStore();
+  }
+  var store = load();
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(store)); } catch (e) { /* 容量不足等は無視 */ } }
+  function today() {
+    var d = new Date(), p = function (n) { return (n < 10 ? '0' : '') + n; };
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  }
+  function dirs() { return store.settings.dir === 'mix' ? ['sn', 'ns'] : [store.settings.dir]; }
+
+  /* ===================== トップ描画 ===================== */
+  function renderTop() {
+    var d = store.settings.dir, f = !!store.settings.freq;
+    Array.prototype.forEach.call($('seg-dir').children, function (b) { b.classList.toggle('on', b.getAttribute('data-dir') === d); });
+    $('sw-freq').classList.toggle('on', f); $('sw-freq').setAttribute('aria-checked', String(f));
+    $('freq-desc').textContent = f ? 'ON：○△×で出る回数が変わる・卒業したカードは出ない' : 'OFF：全部のカードが均等に出る';
+
+    // 全体概要
+    var sumHtml = '';
+    dirs().forEach(function (dd) {
+      var s = E.summary(CARDS, store, store.settings.levels, dd);
+      var pct = s.total ? Math.round(100 * s.grad / s.total) : 0;
+      sumHtml += '<div class="sumline"><span>' + (dirs().length > 1 ? E.DIR_LABEL[dd] + '　' : '') + '卒業</span><span>' + s.grad + ' / ' + s.total + '</span></div>' +
+        '<div class="bar"><i style="width:' + pct + '%"></i></div>';
+    });
+    $('sum').innerHTML = sumHtml;
+
+    // レベル一覧
+    var p = E.progress(CARDS, store);
+    var html = '', lastCat = null;
+    LEVELS.forEach(function (l) {
+      if (l.category !== lastCat) { html += (lastCat ? '<div style="height:10px"></div>' : '') + '<h2 style="margin-top:4px">' + E.escapeHtml(l.category) + '</h2>'; lastCat = l.category; }
+      var checked = store.settings.levels.indexOf(l.key) >= 0;
+      var bars = '', nums = [];
+      dirs().forEach(function (dd) {
+        var q = p[l.key][dd]; var pct = q.total ? Math.round(100 * q.grad / q.total) : 0;
+        bars += '<div class="bar thin"><i style="width:' + pct + '%"></i></div>'; nums.push(q.grad);
+      });
+      html += '<label class="lvl"><input type="checkbox" data-lk="' + E.escapeHtml(l.key) + '"' + (checked ? ' checked' : '') + '>' +
+        '<span class="name">Lv' + l.level + ' <span class="muted">' + l.count + '枚</span></span>' +
+        '<span class="bars">' + bars + '</span>' +
+        '<span class="num">' + nums.join('/') + ' / ' + l.count + '</span>' +
+        '<button type="button" class="rst" data-rst="' + E.escapeHtml(l.key) + '">リセット</button></label>';
+    });
+    $('levels').innerHTML = html;
+
+    var any = store.settings.levels.length > 0;
+    $('btn-start').disabled = !any;
+    $('btn-start').textContent = Object.keys(store.items).length ? 'つづける' : 'はじめる';
+    maybeBanner();
+  }
+
+  function maybeBanner() {
+    if (store.settings.bannerDismissed) return;
+    var standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+    if (standalone) return;
+    $('banner').classList.remove('hidden');
+  }
+
+  /* ===================== セッション（エンドレス） ===================== */
+  var S = null;   // { items, hist:[{item, revealed, mark, snap, revealedAt}], pos }
+
+  function startSession() {
+    var sel = E.selectCards(CARDS, store.settings.levels);
+    S = { items: E.buildItems(sel, dirs()), hist: [], pos: -1 };
+    $('top').classList.add('hidden'); $('card').classList.remove('hidden');
+    $('marks').classList.toggle('hidden', !store.settings.freq);
+    $('done').classList.add('hidden');
+    next();
+  }
+  function toTop() { S = null; $('card').classList.add('hidden'); $('top').classList.remove('hidden'); renderTop(); }
+
+  function current() { return S && S.pos >= 0 ? S.hist[S.pos] : null; }
+
+  function next() {
+    if (!S) return;
+    if (S.pos < S.hist.length - 1) { S.pos += 1; render(); return; }   // 履歴を前に進む
+    var recent = S.hist.map(function (h) { return h.item.key; });
+    var it = E.pickNext(S.items, store, recent, !!store.settings.freq);
+    if (!it) { $('done').classList.remove('hidden'); return; }
+    S.hist.push({ item: it, revealed: 0, mark: null, snap: null, revealedAt: 0 });
+    if (S.hist.length > E.CONFIG.HISTORY_MAX) S.hist.shift();
+    S.pos = S.hist.length - 1;
+    render();
+  }
+  function prev() {
+    if (!S || S.pos <= 0) return;
+    S.pos -= 1;
+    var h = S.hist[S.pos]; h.revealed = E.tokenize(h.item.answer).length;   // 戻ったカードは答え表示済み
+    render();
+  }
+  function latest() { if (!S) return; S.pos = S.hist.length - 1; render(); }
+
+  function render() {
+    var h = current(); if (!h) return;
+    var it = h.item;
+    var qt = E.tokenize(it.face), at = E.tokenize(it.answer);
+    $('q').className = 'face ' + (it.faceIsFormula ? 'formula' : 'jp');
+    $('a').className = 'face ' + (it.answerIsFormula ? 'formula' : 'jp');
+    $('q-txt').innerHTML = E.renderTokens(qt, qt.length, it.faceIsFormula);
+    var full = h.revealed >= at.length;
+    $('a-txt').innerHTML = E.renderTokens(at, h.revealed, it.answerIsFormula) +
+      (full && it.note ? '<span class="note">' + E.escapeHtml(it.note) + '</span>' : '');
+    $('btn-latest').classList.toggle('hidden', S.pos >= S.hist.length - 1);
+    $('pos').textContent = (S.pos < S.hist.length - 1) ? ((S.hist.length - 1 - S.pos) + ' 枚前') : '';
+    Array.prototype.forEach.call($('marks').children, function (b) { b.classList.toggle('sel', h.mark === b.getAttribute('data-m')); });
+  }
+
+  function hint() {
+    var h = current(); if (!h) return;
+    var n = E.tokenize(h.item.answer).length;
+    if (h.revealed < n) { h.revealed += 1; if (h.revealed >= n) h.revealedAt = Date.now(); render(); }
+  }
+  function revealAll() {
+    var h = current(); if (!h) return;
+    var n = E.tokenize(h.item.answer).length;
+    if (h.revealed < n) { h.revealed = n; h.revealedAt = Date.now(); render(); return; }
+    // 全表示済みで答え面をタップ → 頻度調整OFFなら次へ（全表示から300msは無効）
+    if (!store.settings.freq && Date.now() - h.revealedAt > 300) next();
+  }
+  function mark(m) {
+    var h = current(); if (!h) return;
+    if (h.mark) E.undoMark(store, h.snap);          // 押し直し = 前の判定を巻き戻す
+    h.snap = E.applyMark(store, h.item, m, today());
+    h.mark = m; save();
+    next();
+  }
+
+  /* ===================== 入力（タップ・スワイプ） ===================== */
+  var sx = 0, sy = 0, st = 0, swiped = false;
+  var body = $('body');
+  body.addEventListener('touchstart', function (e) { var t = e.changedTouches[0]; sx = t.clientX; sy = t.clientY; st = Date.now(); swiped = false; }, { passive: true });
+  body.addEventListener('touchend', function (e) {
+    var t = e.changedTouches[0]; var dx = t.clientX - sx, dy = t.clientY - sy;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5 && Date.now() - st < 800) {
+      swiped = true;
+      if (dx < 0) next(); else prev();
+    }
+  }, { passive: true });
+  // マウス（PC確認用）
+  var mdown = null;
+  body.addEventListener('mousedown', function (e) { mdown = { x: e.clientX, y: e.clientY }; swiped = false; });
+  body.addEventListener('mouseup', function (e) {
+    if (!mdown) return; var dx = e.clientX - mdown.x, dy = e.clientY - mdown.y; mdown = null;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) { swiped = true; if (dx < 0) next(); else prev(); }
+  });
+  $('q').addEventListener('click', function () { if (swiped) { swiped = false; return; } hint(); });
+  $('a').addEventListener('click', function () { if (swiped) { swiped = false; return; } revealAll(); });
+  Array.prototype.forEach.call($('marks').children, function (b) { b.addEventListener('click', function () { mark(b.getAttribute('data-m')); }); });
+  $('btn-top').addEventListener('click', toTop);
+  $('btn-latest').addEventListener('click', latest);
+  $('btn-done-top').addEventListener('click', toTop);
+  document.addEventListener('keydown', function (e) {   // PC確認用
+    if (!S || $('card').classList.contains('hidden')) return;
+    if (e.key === 'ArrowLeft') prev(); else if (e.key === 'ArrowRight') next();
+    else if (e.key === 'h') hint(); else if (e.key === ' ') { e.preventDefault(); revealAll(); }
+    else if (e.key === '1') mark('o'); else if (e.key === '2') mark('t'); else if (e.key === '3') mark('x');
+  });
+
+  /* ===================== トップの操作 ===================== */
+  $('seg-dir').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    store.settings.dir = b.getAttribute('data-dir'); save(); renderTop();
+  });
+  $('sw-freq').addEventListener('click', function () { store.settings.freq = !store.settings.freq; save(); renderTop(); });
+  $('levels').addEventListener('change', function (e) {
+    var cb = e.target; if (!cb || !cb.getAttribute('data-lk')) return;
+    var lk = cb.getAttribute('data-lk'); var i = store.settings.levels.indexOf(lk);
+    if (cb.checked && i < 0) store.settings.levels.push(lk);
+    if (!cb.checked && i >= 0) store.settings.levels.splice(i, 1);
+    save(); renderTop();
+  });
+  $('levels').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-rst]'); if (!b) return;
+    e.preventDefault();
+    var lk = b.getAttribute('data-rst'); var parts = lk.split(':');
+    var label = parts[0] + ' Lv' + parts[1] + (dirs().length > 1 ? '' : '（' + E.DIR_LABEL[dirs()[0]] + '）');
+    if (!confirm(label + ' の学習記録をリセットします。いいですか？')) return;
+    dirs().forEach(function (d) { E.resetLevel(store, CARDS, lk, d); });
+    save(); renderTop();
+  });
+  $('btn-start').addEventListener('click', startSession);
+  $('btn-reset-all').addEventListener('click', function () {
+    if (!confirm('全部の学習記録を消します。いいですか？')) return;
+    if (!confirm('本当に消しますか？（元に戻せません）')) return;
+    store.items = {}; save(); renderTop();
+  });
+  $('banner-close').addEventListener('click', function () { store.settings.bannerDismissed = true; save(); $('banner').classList.add('hidden'); });
+
+  /* ===================== 起動 ===================== */
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    navigator.serviceWorker.register('sw.js').catch(function () { /* 圏外や非対応は黙って諦める */ });
+  }
+  renderTop();
+  if (store.settings.levels.length) startSession();   // 中断再開前提：前回の続きから
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "name": "kagaku-card",
+  "version": "1.0.0",
+  "private": true,
+  "description": "元素記号・化学式カード — 中学生向け暗記フラッシュカード（単一HTML・サーバなし）",
+  "scripts": {
+    "check": "node build.js --check",
+    "test": "node test/engine.test.js",
+    "build": "node build.js",
+    "serve": "node tools/serve.js",
+    "deploy": "npx wrangler deploy",
+    "ship": "npm test && npm run build && npm run deploy"
+  },
+  "license": "MIT"
+}
