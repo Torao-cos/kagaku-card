@@ -30,7 +30,8 @@ function loadCreds() {
     process.exit(2);
   }
   const text = fs.readFileSync(file, 'utf8');
-  const tok = /API Token[^:]*:\s*(\S+)/.exec(text);
+  // 行の形: 「API Token (Cloudflare Pages:Edit / …): <token>」 → 閉じ括弧＋コロンの後ろを取る
+  const tok = /API Token[^\n]*\):\s*(\S+)/.exec(text);
   const acc = /Account ID:\s*([0-9a-f]{32})/.exec(text);
   if (!tok || !acc) { console.error('✗ 認証ファイルの形式が想定と違う: ' + file); process.exit(2); }
   return { CLOUDFLARE_API_TOKEN: tok[1], CLOUDFLARE_ACCOUNT_ID: acc[1] };
