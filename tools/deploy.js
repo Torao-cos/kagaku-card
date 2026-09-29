@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * tools/deploy.js — dist/ を Cloudflare Pages プロジェクト kagaku-card にデプロイする
+ * tools/deploy.js — docs/ を Cloudflare Pages プロジェクト kagaku-card にデプロイする
  *
  *   npm run deploy   （npm run ship = test → build → deploy）
  *
@@ -10,7 +10,7 @@
  *   3) 既定のファイル（owner の OneDrive 上・git 管理外）
  *
  * wrangler.jsonc（Workers 用）が同じディレクトリにあると Pages デプロイが拒否されるため、
- * dist/ を一時ディレクトリにコピーしてそこから実行する。
+ * docs/ を一時ディレクトリにコピーしてそこから実行する。
  */
 'use strict';
 const fs = require('fs');
@@ -38,8 +38,8 @@ function loadCreds() {
 }
 
 function main() {
-  const dist = path.join(ROOT, 'dist');
-  if (!fs.existsSync(path.join(dist, 'index.html'))) { console.error('✗ dist/index.html がない。先に npm run build'); process.exit(1); }
+  const dist = path.join(ROOT, 'docs');
+  if (!fs.existsSync(path.join(dist, 'index.html'))) { console.error('✗ docs/index.html がない。先に npm run build'); process.exit(1); }
   const version = fs.existsSync(path.join(dist, 'version.txt')) ? fs.readFileSync(path.join(dist, 'version.txt'), 'utf8').trim() : '?';
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kagaku-deploy-'));
   fs.cpSync(dist, path.join(tmp, 'dist'), { recursive: true });

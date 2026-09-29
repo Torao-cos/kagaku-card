@@ -170,11 +170,64 @@
     return errs;
   }
 
-  /** 選択範囲のカードだけ */
-  function selectCards(cards, selectedLevelKeys) {
-    var sel = Object.create(null);
-    (selectedLevelKeys || []).forEach(function (k) { sel[k] = true; });
-    return cards.filter(function (c) { return sel[levelKey(c)]; });
+  /* ===================== セット（試験範囲など・SPEC §2.5） ===================== */
+
+  function setKey(name) { return 'set:' + name; }
+  function isSetKey(k) { return typeof k === 'string' && k.indexOf('set:') === 0; }
+
+  /**
+   * data/sets.csv の行 [{set, category, level, symbol}] → [{ key, name, cardIds, count }]
+   * 行は「レベル丸ごと（level あり）」か「個別カード（symbol あり）」。同名 set の行は1つに束ねる。
+   * 一致するカードが無い行は validateSets で弾く（ここでは黙って飛ばす）。
+   */
+  function buildSets(cards, rows) {
+    var byName = Object.create(null), order = [];
+    (rows || []).forEach(function (r) {
+      var name = String(r.set || '').trim(); if (!name) return;
+      if (!byName[name]) { byName[name] = { key: setKey(name), name: name, cardIds: [], _seen: Object.create(null) }; order.push(name); }
+      var st = byName[name];
+      matchSetRow(cards, r).forEach(function (c) { if (!st._seen[c.id]) { st._seen[c.id] = true; st.cardIds.push(c.id); } });
+    });
+    return order.map(function (n) { var st = byName[n]; delete st._seen; st.count = st.cardIds.length; return st; });
+  }
+  function matchSetRow(cards, r) {
+    var cat = String(r.category || '').trim();
+    var lv = parseInt(r.level, 10);
+    var sym = normalizeSymbol(r.symbol);
+    return cards.filter(function (c) {
+      if (c.category !== cat) return false;
+      if (!isNaN(lv)) return c.level === lv;
+      if (sym) return c.symbol === sym;
+      return false;
+    });
+  }
+  function validateSets(cards, rows) {
+    var errs = [];
+    (rows || []).forEach(function (r, idx) {
+      var where = 'sets.csv ' + (idx + 2) + '行目 ' + (r.set || '?') + ' / ' + (r.category || '?') + ' / ' + (r.level || '') + (r.symbol || '');
+      if (!String(r.set || '').trim()) { errs.push({ row: idx, msg: where + ': set 名が空' }); return; }
+      var hasLv = !isNaN(parseInt(r.level, 10)), hasSym = !!normalizeSymbol(r.symbol);
+      if (hasLv === hasSym) { errs.push({ row: idx, msg: where + ': level か symbol のどちらか一方だけを書く' }); return; }
+      if (matchSetRow(cards, r).length === 0) errs.push({ row: idx, msg: where + ': 一致するカードが cards.csv に無い' });
+    });
+    return errs;
+  }
+
+  /** 選択範囲のカードだけ。selectedKeys はレベルキー（'化学式:2'）とセットキー（'set:…'）の混在可。重複は1枚に */
+  function selectCards(cards, selectedKeys, sets) {
+    var sel = Object.create(null), ids = Object.create(null);
+    (selectedKeys || []).forEach(function (k) { sel[k] = true; });
+    (sets || []).forEach(function (st) { if (sel[st.key]) st.cardIds.forEach(function (id) { ids[id] = true; }); });
+    return cards.filter(function (c) { return sel[levelKey(c)] || ids[c.id]; });
+  }
+  /** キー1つ（レベル or セット）に属するカード */
+  function cardsForKey(cards, key, sets) {
+    if (isSetKey(key)) {
+      var st = (sets || []).filter(function (x) { return x.key === key; })[0];
+      var ids = Object.create(null); (st ? st.cardIds : []).forEach(function (id) { ids[id] = true; });
+      return cards.filter(function (c) { return ids[c.id]; });
+    }
+    return cards.filter(function (c) { return levelKey(c) === key; });
   }
 
   /**
@@ -348,14 +401,15 @@
     return out;
   }
 
-  /** 選択範囲×方向の合計 { total, grad } */
-  function summary(cards, store, selectedLevelKeys, dir) {
-    var p = progress(cards, store);
+  /** カード集合×方向の { total, grad } */
+  function progressOf(cardsSubset, store, dir) {
     var total = 0, grad = 0;
-    (selectedLevelKeys || []).forEach(function (lk) {
-      if (p[lk] && p[lk][dir]) { total += p[lk][dir].total; grad += p[lk][dir].grad; }
-    });
+    cardsSubset.forEach(function (c) { total += 1; if (getState(store, c.id, dir).grad) grad += 1; });
     return { total: total, grad: grad };
+  }
+  /** 選択範囲×方向の合計 { total, grad }（レベルとセットで同じカードが重なっても1枚として数える） */
+  function summary(cards, store, selectedKeys, dir, sets) {
+    return progressOf(selectCards(cards, selectedKeys, sets), store, dir);
   }
 
   /** カード1枚のリセット（dir 省略で両方向）＝状態を消して「未」に戻す */
@@ -367,9 +421,9 @@
    * レベル内のカード一覧（別画面用）。dirs で指定した方向の状態をまとめる。
    * 戻り値: [{ card, grad(全方向で覚えた), any(何か記録あり), states: {sn:{...}, ns:{...}} }] — 覚えた → 覚えた×1 → 記録あり → 未 の順
    */
-  function cardList(cards, store, lk, dirs) {
+  function cardList(cards, store, lk, dirs, sets) {
     var ds = dirs || DIRS;
-    var out = cards.filter(function (c) { return levelKey(c) === lk; }).map(function (c) {
+    var out = cardsForKey(cards, lk, sets).map(function (c) {
       var states = {}, grad = true, any = false;
       ds.forEach(function (d) {
         var k = itemKey(c.id, d);
@@ -390,11 +444,10 @@
     return out;
   }
 
-  /** レベル×方向のリセット（dir 省略で両方向） */
-  function resetLevel(store, cards, lk, dir) {
+  /** レベル or セット × 方向のリセット（dir 省略で両方向） */
+  function resetLevel(store, cards, lk, dir, sets) {
     var dirs = dir ? [dir] : DIRS;
-    cards.forEach(function (c) {
-      if (levelKey(c) !== lk) return;
+    cardsForKey(cards, lk, sets).forEach(function (c) {
       dirs.forEach(function (d) { delete store.items[itemKey(c.id, d)]; });
     });
   }
@@ -421,10 +474,11 @@
     normalizeSymbol: normalizeSymbol, normalizeName: normalizeName, normalizeCard: normalizeCard,
     tokenize: tokenize, renderTokens: renderTokens, escapeHtml: escapeHtml,
     cardId: cardId, levelKey: levelKey, itemKey: itemKey,
-    validateCards: validateCards, selectCards: selectCards, buildItems: buildItems,
+    validateCards: validateCards, selectCards: selectCards, cardsForKey: cardsForKey, buildItems: buildItems,
+    setKey: setKey, isSetKey: isSetKey, buildSets: buildSets, validateSets: validateSets,
     emptyStore: emptyStore, freshState: freshState, getState: getState, itemState: itemState,
     applyMark: applyMark, undoMark: undoMark,
     makeRng: makeRng, cooldownFor: cooldownFor, pickNext: pickNext,
-    progress: progress, summary: summary, resetLevel: resetLevel, resetCard: resetCard, cardList: cardList, levelList: levelList
+    progress: progress, progressOf: progressOf, summary: summary, resetLevel: resetLevel, resetCard: resetCard, cardList: cardList, levelList: levelList
   };
 });

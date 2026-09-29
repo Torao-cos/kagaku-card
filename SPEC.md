@@ -1,6 +1,6 @@
 # 元素記号・化学式カード — 仕様書（正本）
 
-最終更新: 2026-09-20（v1.2: 「覚えた」ボタン1つ・タップ/左スワイプ＝×・×は基準値に戻す・カード一覧から1枚ずつ戻す）／ 合意者: owner ／ 状態: 公開中 https://kagaku-card.pages.dev/
+最終更新: 2026-09-29（v1.3: 試験範囲セット `data/sets.csv`・出力先 docs/・GitHub Pages 併用）／ 合意者: owner ／ 状態: 公開中 https://kagaku-card.pages.dev/
 
 > 中学生向けの暗記用フラッシュカード。クイズではない。赤シートのように「答えを隠して→タップで開く」だけの学習加速ツール。
 > 評価は授業のテストで行う。アプリは成績を集計しないし、サーバも持たない。
@@ -45,11 +45,29 @@ owner が渡す自然な書式（`【レベル1】…` 見出し＋「名称 記
 node tools/import-list.js 元素記号 input.txt >> data/cards.csv
 ```
 
+### 2.5 セット（試験範囲など）= `data/sets.csv`
+
+「レベル丸ごと＋個別カード」を混ぜた名前つきの範囲。トップの出題範囲の先頭に **「試験範囲」** 見出しで並び、レベルと同じ行（チェック・枚数・進捗・一覧・リセット）で扱える。
+
+```csv
+set,category,level,symbol
+2026年度中1試験範囲,元素記号,1,        ← レベル丸ごと
+2026年度中1試験範囲,元素記号,,Mn       ← 個別カード（category+symbol で特定）
+2026年度中1試験範囲,化学式,,H2O2
+```
+
+- 1行は level か symbol の**どちらか一方**だけ。一致するカードが無い行はビルドを止める
+- 同名 set の行は1つに束ねる。レベルと重なるカードは1枚として数える（選択・進捗とも）
+- カードの学習記録はカード単位なので、セット経由でもレベル経由でも同じ記録を共有する
+- 初回（2026-09-29 owner指定）: **2026年度中1試験範囲** = 元素記号Lv1（1〜20番）＋Mn,Fe,Zn,Au,Ag,Cu＋化学式Lv1・Lv2＋H2O2,NaHCO3 = **55枚**
+- 来年度の範囲変更はこの CSV を書き換えて `npm run ship`
+
 ### 2.3 検証（ビルド前に必ず通る・失敗したらビルドしない）
 
 - 化学式の元素記号が実在する（118元素の表と照合 → `Nh` のような誤字を弾く）
 - 括弧の対応が取れている
 - `(category, name, symbol)` の重複なし
+- sets.csv の各行が実在カードに一致する
 - level が整数
 - ヒント分割 → 結合 が元の文字列に戻る（トークナイザの健全性）
 
@@ -184,11 +202,14 @@ node tools/import-list.js 元素記号 input.txt >> data/cards.csv
 
 ## 8. 配布・インフラ
 
-- **配信（現状・2026-09-20）**: Cloudflare **Pages** プロジェクト `kagaku-card` → **https://kagaku-card.pages.dev/**。アカウント `jiyuunatorao@gmail.com`
+- **ビルド出力は `docs/`**（GitHub Pages が root か /docs しか選べないため。dist/ から改名 2026-09-29）
+- **配信は2本立て（2026-09-29 owner方針）**:
+  - **GitHub Pages（今後のメイン）**: https://torao-cos.github.io/kagaku-card/ — リポの main ブランチ `/docs` をそのまま配信。push＝デプロイ。※GitHub Pages は商用利用不可（無料学習ツールなので範囲内）
+  - **Cloudflare Pages（2026年度中1試験ではこちらのURLを配布）**: プロジェクト `kagaku-card` → **https://kagaku-card.pages.dev/**。アカウント `jiyuunatorao@gmail.com`
   - 本命は Workers（Static Assets）だったが、手元の API トークンが Pages:Edit スコープのみで Workers 経路が認証エラー → wrangler の案内どおり旧 Pages 経路（`--force` で作成）に置いた。静的ファイルだけなので Workers への移行は「Workers 権限つきトークンを1本作る → `wrangler deploy`」で完了する（生徒側のURLは変わるので配り直しが要る＝移行するなら早いうちに）
-  - `wrangler.jsonc` は Workers 用に残してある。Pages デプロイは `tools/deploy.js` が dist を一時ディレクトリにコピーして実行する（同じ場所に wrangler.jsonc があると Pages が拒否するため）
+  - `wrangler.jsonc` は Workers 用に残してある。Pages デプロイは `tools/deploy.js` が docs/ を一時ディレクトリにコピーして実行する（同じ場所に wrangler.jsonc があると Pages が拒否するため）
 - **ソース**: GitHub public リポジトリ **https://github.com/Torao-cos/kagaku-card**（2026-09-23 作成・push済み）。ホスティングには使わない。push は `tools/push.js`（リポ限定の fine-grained PAT を git 管理外ファイルから読む）
-- **更新手順（1コマンド）**: `npm run ship` = テスト → 検証・ビルド → Cloudflare デプロイ → GitHub push。認証情報は git 管理外のファイル（`tools/deploy.js` / `tools/push.js` 冒頭参照）
+- **更新手順（1コマンド）**: `npm run ship` = テスト → 検証・ビルド → Cloudflare デプロイ → GitHub push（＝GitHub Pages も更新）。認証情報は git 管理外のファイル（`tools/deploy.js` / `tools/push.js` 冒頭参照）
 
 ## 9. やらないこと（初版）
 
@@ -207,6 +228,7 @@ node tools/import-list.js 元素記号 input.txt >> data/cards.csv
 - 「覚えた」=2回続けて○（owner）。1日1回制限はClaude提案→SPECに「owner承認」と誤記→2026-09-20 owner指示で撤回（フラグで残置）
 - v1.1（2026-09-20 owner）: 頻度調整既定ON／○×の2択（△廃止）／答え面タップで次へ＝ON時は×扱い／「卒業」→「覚えた・出なくなる」表記／説明にタップ次へを追記
 - v1.2（2026-09-20 owner）: ボタンは「覚えた」1つ／タップ・左スワイプ＝×／**×は重みを基準1.0に戻すだけで上げない**（owner案「×は頻度を変えない」＋Claude提案「○の割引は取り消す」）／トップ=全体・レベル別リセット、別画面=カード一覧から1枚ずつ戻す
+- v1.3（2026-09-29 owner）: 試験範囲セット（sets.csv）／GitHub Pages を今後のメイン配信に・今回の試験は Cloudflare URL を配布／出力先 docs/
 - 1周・結果画面・枚数上限は**廃止**（owner: エンドレス・終わりなし）
 - 進捗エクスポート廃止（Claude提案・owner承認）
 - 「タップで答え」プレースホルダは不採用（owner: 毎回見せる説明は脳のリソースの無駄）

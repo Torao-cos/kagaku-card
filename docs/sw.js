@@ -1,6 +1,6 @@
 /* sw.js — stale-while-revalidate。一度開けば以後は圏外でも開ける（絶対保証はしない）。
- * a98971ba51 は build.js が差し替える。内容が変わるとキャッシュ名が変わり、古いキャッシュは activate で消す。 */
-var CACHE = 'kagaku-card-a98971ba51';
+ * 5ef6c2398b は build.js が差し替える。内容が変わるとキャッシュ名が変わり、古いキャッシュは activate で消す。 */
+var CACHE = 'kagaku-card-5ef6c2398b';
 var ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-180.png'];
 
 self.addEventListener('install', function (e) {

@@ -4,7 +4,7 @@
 const assert = require('assert');
 const path = require('path');
 const E = require('../src/engine.js');
-const { loadCards } = require('../build.js');
+const { loadCards, loadSetRows } = require('../build.js');
 
 let passed = 0, failed = 0;
 function t(name, fn) {
@@ -276,6 +276,44 @@ t('levelList 順序', () => {
   assert.deepStrictEqual(E.levelList(cards).map((l) => l.key),
     ['元素記号:1', '元素記号:2', '元素記号:3', '元素記号:4', '元素記号:5', '化学式:1', '化学式:2', '化学式:3', '化学式:4']);
 });
+
+
+/* ---------- セット（試験範囲・SPEC §2.5） ---------- */
+const SET_ROWS = loadSetRows(path.join(__dirname, '..', 'data', 'sets.csv'));
+const SETS = E.buildSets(cards, SET_ROWS);
+t('sets.csv 検証 PASS・2026年度中1試験範囲 = 55枚', () => {
+  assert.deepStrictEqual(E.validateSets(cards, SET_ROWS).map((e) => e.msg), []);
+  assert.strictEqual(SETS.length, 1);
+  assert.strictEqual(SETS[0].name, '2026年度中1試験範囲');
+  assert.strictEqual(SETS[0].count, 55);   // 元素Lv1 20 + 個別6 + 化学式Lv1 13 + Lv2 14 + 個別2
+  const ids = new Set(SETS[0].cardIds);
+  assert.ok(ids.has('元素記号:マンガン:Mn')); assert.ok(ids.has('化学式:過酸化水素:H2O2')); assert.ok(ids.has('化学式:炭酸水素ナトリウム:NaHCO3'));
+  assert.ok(!ids.has('元素記号:臭素:Br')); assert.ok(!ids.has('化学式:硫酸:H2SO4'));
+});
+t('validateSets は誤りを弾く', () => {
+  const bad = [{ set: 'x', category: '元素記号', level: '', symbol: 'Xx' }, { set: 'x', category: '化学式', level: '2', symbol: 'H2O' }, { set: '', category: '化学式', level: '1', symbol: '' }];
+  const msgs = E.validateSets(cards, bad).map((e) => e.msg);
+  assert.ok(msgs.some((m) => /一致するカードが/.test(m)));
+  assert.ok(msgs.some((m) => /どちらか一方/.test(m)));
+  assert.ok(msgs.some((m) => /set 名が空/.test(m)));
+});
+t('selectCards: セットとレベルが重なっても1枚に', () => {
+  const sel = E.selectCards(cards, [SETS[0].key, '元素記号:1'], SETS);
+  assert.strictEqual(sel.length, 55);
+  const sel2 = E.selectCards(cards, [SETS[0].key, '元素記号:3'], SETS);
+  assert.strictEqual(sel2.length, 60);
+});
+t('summary / resetLevel / cardList がセットキーで動く', () => {
+  const st = E.emptyStore();
+  const mn = { key: 'k', dir: 'sn', cardIds: ['元素記号:マンガン:Mn'] };
+  E.applyMark(st, mn, 'o', 'd1'); E.applyMark(st, mn, 'o', 'd1');
+  assert.deepStrictEqual(E.summary(cards, st, [SETS[0].key], 'sn', SETS), { total: 55, grad: 1 });
+  const list = E.cardList(cards, st, SETS[0].key, ['sn'], SETS);
+  assert.strictEqual(list.length, 55); assert.ok(list[0].grad && list[0].card.symbol === 'Mn');
+  E.resetLevel(st, cards, SETS[0].key, 'sn', SETS);
+  assert.deepStrictEqual(E.summary(cards, st, [SETS[0].key], 'sn', SETS), { total: 55, grad: 0 });
+});
+
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

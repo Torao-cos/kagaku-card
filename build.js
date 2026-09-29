@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * build.js — data/cards.csv + src/engine.js + src/app.html → dist/（単一 index.html ＋ sw.js ＋ manifest ＋ アイコン）
+ * build.js — data/cards.csv + src/engine.js + src/app.html → docs/（単一 index.html ＋ sw.js ＋ manifest ＋ アイコン）
  * 外部依存なし。Node 18+。
  *
  *   node build.js            ビルド（検証NGなら何も書かず exit 1）
@@ -17,10 +17,11 @@ const E = require('./src/engine.js');
 
 const ROOT = __dirname;
 const CSV_PATH = path.join(ROOT, 'data', 'cards.csv');
+const SETS_PATH = path.join(ROOT, 'data', 'sets.csv');
 const TPL_PATH = path.join(ROOT, 'src', 'app.html');
 const SW_PATH = path.join(ROOT, 'src', 'sw.js');
 const ENGINE_PATH = path.join(ROOT, 'src', 'engine.js');
-const DIST = path.join(ROOT, 'dist');
+const DIST = path.join(ROOT, 'docs');
 
 /* ===================== CSV ===================== */
 function parseCsv(text) {
@@ -52,6 +53,20 @@ function loadCards(csvPath) {
   return rows.slice(1).map((r) => E.normalizeCard({
     category: r[idx('category')], level: r[idx('level')], name: r[idx('name')], symbol: r[idx('symbol')],
     note: idx('note') >= 0 ? r[idx('note')] : ''
+  }));
+}
+
+/** data/sets.csv → 行配列 [{set, category, level, symbol}]（無ければ空） */
+function loadSetRows(setsPath) {
+  const p = setsPath || SETS_PATH;
+  if (!fs.existsSync(p)) return [];
+  const rows = parseCsv(fs.readFileSync(p, 'utf8'));
+  const header = rows[0].map((h) => h.trim());
+  const idx = (name) => header.indexOf(name);
+  ['set', 'category'].forEach((h) => { if (idx(h) < 0) throw new Error('sets.csv ヘッダに ' + h + ' がない'); });
+  return rows.slice(1).map((r) => ({
+    set: r[idx('set')], category: r[idx('category')],
+    level: idx('level') >= 0 ? r[idx('level')] : '', symbol: idx('symbol') >= 0 ? r[idx('symbol')] : ''
   }));
 }
 
@@ -112,24 +127,29 @@ function iconPixel(size) {
 function build(opts) {
   opts = opts || {};
   const cards = loadCards();
-  const errs = E.validateCards(cards);
+  const setRows = loadSetRows();
+  const errs = E.validateCards(cards).concat(E.validateSets(cards, setRows));
   if (errs.length) {
     console.error('✗ データ検証に失敗（ビルドしません）:');
     errs.forEach((e) => console.error('   - ' + e.msg));
     process.exit(1);
   }
   const levels = E.levelList(cards);
-  console.log('✓ 検証OK: ' + cards.length + '枚 / ' + levels.map((l) => l.category + 'Lv' + l.level + '=' + l.count).join(', '));
+  const sets = E.buildSets(cards, setRows);
+  console.log('✓ 検証OK: ' + cards.length + '枚 / ' + levels.map((l) => l.category + 'Lv' + l.level + '=' + l.count).join(', ') +
+    (sets.length ? ' / セット: ' + sets.map((s) => s.name + '=' + s.count + '枚').join(', ') : ''));
   if (opts.checkOnly) return;
 
   const engineSrc = fs.readFileSync(ENGINE_PATH, 'utf8');
   const dataJson = JSON.stringify(cards.map((c) => ({ category: c.category, level: c.level, name: c.name, symbol: c.symbol, note: c.note })));
+  const setsJson = JSON.stringify(setRows);
   let html = fs.readFileSync(TPL_PATH, 'utf8');
-  const version = crypto.createHash('sha1').update(engineSrc + dataJson + html + fs.readFileSync(SW_PATH, 'utf8')).digest('hex').slice(0, 10);
+  const version = crypto.createHash('sha1').update(engineSrc + dataJson + setsJson + html + fs.readFileSync(SW_PATH, 'utf8')).digest('hex').slice(0, 10);
   html = html.split('/*__ENGINE__*/').join(engineSrc)
     .split('"__DATA__"').join(dataJson)
+    .split('"__SETS__"').join(setsJson)
     .split('__VERSION__').join(version);
-  if (html.indexOf('__DATA__') >= 0 || html.indexOf('__ENGINE__') >= 0) throw new Error('テンプレートのプレースホルダ置換に失敗');
+  if (html.indexOf('__DATA__') >= 0 || html.indexOf('__SETS__') >= 0 || html.indexOf('__ENGINE__') >= 0) throw new Error('テンプレートのプレースホルダ置換に失敗');
 
   fs.mkdirSync(DIST, { recursive: true });
   fs.writeFileSync(path.join(DIST, 'index.html'), html);
@@ -141,8 +161,8 @@ function build(opts) {
   }, null, 2));
   [180, 192, 512].forEach((s) => fs.writeFileSync(path.join(DIST, 'icon-' + s + '.png'), makePng(s, iconPixel(s))));
   fs.writeFileSync(path.join(DIST, 'version.txt'), version + '\n');
-  console.log('✓ dist/ 生成 (version ' + version + ', index.html ' + (fs.statSync(path.join(DIST, 'index.html')).size / 1024).toFixed(1) + ' KB)');
+  console.log('✓ docs/ 生成 (version ' + version + ', index.html ' + (fs.statSync(path.join(DIST, 'index.html')).size / 1024).toFixed(1) + ' KB)');
 }
 
-module.exports = { loadCards, parseCsv, build };
+module.exports = { loadCards, loadSetRows, parseCsv, build };
 if (require.main === module) build({ checkOnly: process.argv.includes('--check') });

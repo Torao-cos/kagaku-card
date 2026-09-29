@@ -219,6 +219,7 @@
   var DATA = "__DATA__";
   var CARDS = DATA.map(E.normalizeCard);
   var LEVELS = E.levelList(CARDS);
+  var SETS = E.buildSets(CARDS, "__SETS__");   // 試験範囲などの名前つきカード集合（data/sets.csv）
   var KEY = 'kagaku-card-v1';
   var $ = function (id) { return document.getElementById(id); };
 
@@ -252,30 +253,38 @@
     // 全体概要
     var sumHtml = '';
     dirs().forEach(function (dd) {
-      var s = E.summary(CARDS, store, store.settings.levels, dd);
+      var s = E.summary(CARDS, store, store.settings.levels, dd, SETS);
       var pct = s.total ? Math.round(100 * s.grad / s.total) : 0;
       sumHtml += '<div class="sumline"><span>' + (dirs().length > 1 ? E.DIR_LABEL[dd] + '　' : '') + '覚えた</span><span>' + s.grad + ' / ' + s.total + '</span></div>' +
         '<div class="bar"><i style="width:' + pct + '%"></i></div>';
     });
     $('sum').innerHTML = sumHtml;
 
-    // レベル一覧
-    var p = E.progress(CARDS, store);
-    var html = '', lastCat = null;
-    LEVELS.forEach(function (l) {
-      if (l.category !== lastCat) { html += (lastCat ? '<div style="height:10px"></div>' : '') + '<h2 style="margin-top:4px">' + E.escapeHtml(l.category) + '</h2>'; lastCat = l.category; }
-      var checked = store.settings.levels.indexOf(l.key) >= 0;
+    // 範囲行（セット／レベル共通の描画）
+    function rangeRow(key, label, cardsOfKey) {
+      var checked = store.settings.levels.indexOf(key) >= 0;
       var bars = '', nums = [];
       dirs().forEach(function (dd) {
-        var q = p[l.key][dd]; var pct = q.total ? Math.round(100 * q.grad / q.total) : 0;
+        var q = E.progressOf(cardsOfKey, store, dd); var pct = q.total ? Math.round(100 * q.grad / q.total) : 0;
         bars += '<div class="bar thin"><i style="width:' + pct + '%"></i></div>'; nums.push(q.grad);
       });
-      html += '<label class="lvl"><input type="checkbox" data-lk="' + E.escapeHtml(l.key) + '"' + (checked ? ' checked' : '') + '>' +
-        '<span class="name">Lv' + l.level + ' <span class="muted">' + l.count + '枚</span></span>' +
-        '<span class="num">' + nums.join('/') + ' / ' + l.count + '</span>' +
-        '<button type="button" class="lst" data-lst="' + E.escapeHtml(l.key) + '">一覧</button>' +
-        '<button type="button" class="rst" data-rst="' + E.escapeHtml(l.key) + '">リセット</button>' +
+      return '<label class="lvl"><input type="checkbox" data-lk="' + E.escapeHtml(key) + '"' + (checked ? ' checked' : '') + '>' +
+        '<span class="name">' + label + ' <span class="muted">' + cardsOfKey.length + '枚</span></span>' +
+        '<span class="num">' + nums.join('/') + ' / ' + cardsOfKey.length + '</span>' +
+        '<button type="button" class="lst" data-lst="' + E.escapeHtml(key) + '">一覧</button>' +
+        '<button type="button" class="rst" data-rst="' + E.escapeHtml(key) + '">リセット</button>' +
         '<span class="bars">' + bars + '</span></label>';
+    }
+    var html = '';
+    if (SETS.length) {
+      html += '<h2 style="margin-top:4px">試験範囲</h2>';
+      SETS.forEach(function (st) { html += rangeRow(st.key, E.escapeHtml(st.name), E.cardsForKey(CARDS, st.key, SETS)); });
+      html += '<div style="height:10px"></div>';
+    }
+    var lastCat = null;
+    LEVELS.forEach(function (l) {
+      if (l.category !== lastCat) { html += (lastCat ? '<div style="height:10px"></div>' : '') + '<h2 style="margin-top:4px">' + E.escapeHtml(l.category) + '</h2>'; lastCat = l.category; }
+      html += rangeRow(l.key, 'Lv' + l.level, E.cardsForKey(CARDS, l.key, SETS));
     });
     $('levels').innerHTML = html;
 
@@ -296,7 +305,7 @@
   var S = null;   // { items, hist:[{item, revealed, mark, snap, revealedAt}], pos }
 
   function startSession() {
-    var sel = E.selectCards(CARDS, store.settings.levels);
+    var sel = E.selectCards(CARDS, store.settings.levels, SETS);
     S = { items: E.buildItems(sel, dirs()), hist: [], pos: -1 };
     $('top').classList.add('hidden'); $('card').classList.remove('hidden');
     $('marks').classList.toggle('hidden', !store.settings.freq);
@@ -307,6 +316,10 @@
 
   /* ===================== カード一覧（1枚ずつ戻す） ===================== */
   var detailKey = null;
+  function keyLabel(key) {
+    if (E.isSetKey(key)) return key.slice(4);
+    var parts = key.split(':'); return parts[0] + ' Lv' + parts[1];
+  }
   function openDetail(lk) {
     detailKey = lk;
     $('top').classList.add('hidden'); $('detail').classList.remove('hidden');
@@ -319,10 +332,9 @@
     return '記録あり';
   }
   function renderDetail() {
-    var parts = detailKey.split(':');
     var ds = dirs();
-    $('detail-title').textContent = parts[0] + ' Lv' + parts[1] + '（' + ds.map(function (d) { return E.DIR_LABEL[d]; }).join(' / ') + '）';
-    var list = E.cardList(CARDS, store, detailKey, ds);
+    $('detail-title').textContent = keyLabel(detailKey) + '（' + ds.map(function (d) { return E.DIR_LABEL[d]; }).join(' / ') + '）';
+    var list = E.cardList(CARDS, store, detailKey, ds, SETS);
     var html = '';
     list.forEach(function (row) {
       var stt = ds.map(function (d) { return stateLabel(row.states[d]); }).join(' / ');
@@ -454,10 +466,10 @@
     if (lb) { e.preventDefault(); openDetail(lb.getAttribute('data-lst')); return; }
     var b = e.target.closest('button[data-rst]'); if (!b) return;
     e.preventDefault();
-    var lk = b.getAttribute('data-rst'); var parts = lk.split(':');
-    var label = parts[0] + ' Lv' + parts[1] + (dirs().length > 1 ? '' : '（' + E.DIR_LABEL[dirs()[0]] + '）');
+    var lk = b.getAttribute('data-rst');
+    var label = keyLabel(lk) + (dirs().length > 1 ? '' : '（' + E.DIR_LABEL[dirs()[0]] + '）');
     if (!confirm(label + ' の学習記録をリセットします。いいですか？')) return;
-    dirs().forEach(function (d) { E.resetLevel(store, CARDS, lk, d); });
+    dirs().forEach(function (d) { E.resetLevel(store, CARDS, lk, d, SETS); });
     save(); renderTop();
   });
   $('btn-start').addEventListener('click', startSession);

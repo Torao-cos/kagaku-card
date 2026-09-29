@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-/* tools/serve.js — dist/ をローカル配信（動作確認用）。 node tools/serve.js [port=8787] */
+/* tools/serve.js — docs/ をローカル配信（動作確認用）。 node tools/serve.js [port=8787] */
 'use strict';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const DIST = path.join(__dirname, '..', 'dist');
+const DIST = path.join(__dirname, '..', 'docs');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.png': 'image/png', '.webmanifest': 'application/manifest+json', '.txt': 'text/plain' };
 const port = parseInt(process.argv[2], 10) || 8787;
 http.createServer((req, res) => {
