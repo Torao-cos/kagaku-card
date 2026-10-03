@@ -5,6 +5,7 @@
 
 - 仕様の正本: [`SPEC.md`](SPEC.md)
 - データ（唯一の編集箇所）: [`data/cards.csv`](data/cards.csv)
+- 別ページ **イオン式カード**（`/ion/`）: データは [`data/ions.csv`](data/ions.csv)（電荷は `Ca^2+` `SO4^2-` のように `^` の後ろに書く）。保存キー・SW キャッシュはトップと別。詳細は SPEC §8.5
 
 ## 使い方（学習者）
 
@@ -30,14 +31,14 @@ npm run ship
 - カードIDは `category:name:symbol` の内容ベース。行の並べ替え・追加・削除で学習履歴は壊れません
 - 元素記号の誤字（実在しない記号）、括弧の不一致、重複行はビルド前に機械的に弾かれます
 - 生徒側への反映は「次の次の起動」（Service Worker の stale-while-revalidate）
-- 公開URL: GitHub Pages https://torao-cos.github.io/kagaku-card/ （メイン）／Cloudflare https://kagaku-card.pages.dev/
+- 公開URL: GitHub Pages https://torao-cos.github.io/kagaku-card/ （メイン）／Cloudflare https://kagaku-card.pages.dev/ （イオン式はそれぞれ末尾に `ion/`）
 
 ## 開発
 
 ```sh
 npm test          # エンジンの決定論テスト（tokenizer / 統合 / 卒業 / クールダウン / 重み）
-npm run build     # docs/ 生成（検証NGなら生成しない・GitHub Pages が /docs を配信）
-npm run serve     # http://localhost:8787/ でローカル確認
+npm run build     # docs/ と docs/ion/ を生成（検証NGなら生成しない・GitHub Pages が /docs を配信）
+npm run serve     # http://localhost:8787/ と http://localhost:8787/ion/ でローカル確認
 ```
 
 構成: `src/engine.js`（純関数エンジン）／`src/app.html`（UIテンプレート）／`src/sw.js`／`build.js`／`tools/`

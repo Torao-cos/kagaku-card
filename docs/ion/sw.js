@@ -2,9 +2,9 @@
  * VERSION / CACHE_PREFIX / SW_SKIP のプレースホルダは build.js がページごとに差し替える。
  * 同一オリジンに複数ページ（/ と /ion/）が並ぶため、消すのは自分の prefix のキャッシュだけ。
  * SKIP（scope からの相対パス）配下は別ページの SW の担当なので触らない。 */
-var PREFIX = '__CACHE_PREFIX__';
-var CACHE = PREFIX + '__VERSION__';
-var SKIP = "__SW_SKIP__";
+var PREFIX = 'kagaku-ion-';
+var CACHE = PREFIX + 'da914b557c';
+var SKIP = [];
 var ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-180.png'];
 
 self.addEventListener('install', function (e) {

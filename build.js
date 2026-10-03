@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /*
- * build.js — data/cards.csv + src/engine.js + src/app.html → docs/（単一 index.html ＋ sw.js ＋ manifest ＋ アイコン）
+ * build.js — data/*.csv + src/engine.js + src/app.html → ページごとに docs/（元素記号・化学式）と docs/ion/（イオン式）
+ *            （各フォルダに単一 index.html ＋ sw.js ＋ manifest ＋ アイコン）
  * 外部依存なし。Node 18+。
  *
  *   node build.js            ビルド（検証NGなら何も書かず exit 1）
@@ -22,6 +23,21 @@ const TPL_PATH = path.join(ROOT, 'src', 'app.html');
 const SW_PATH = path.join(ROOT, 'src', 'sw.js');
 const ENGINE_PATH = path.join(ROOT, 'src', 'engine.js');
 const DIST = path.join(ROOT, 'docs');
+
+/* ページ定義（1ページ = 1フォルダ。同一オリジンに並ぶので SW のキャッシュ名 prefix と保存キーは必ず別にする） */
+const PAGES = [
+  {
+    id: 'main', csv: CSV_PATH, sets: SETS_PATH, out: DIST,
+    title: '元素記号・化学式カード', shortName: '化学カード', storageKey: 'kagaku-card-v1', cachePrefix: 'kagaku-card-',
+    defaultDir: 'sn', dirLabels: null, levelLabels: {}, swSkip: ['ion/'], iconAccent: [255, 196, 61]
+  },
+  {
+    id: 'ion', csv: path.join(ROOT, 'data', 'ions.csv'), sets: path.join(ROOT, 'data', 'ion-sets.csv'), out: path.join(DIST, 'ion'),
+    title: 'イオン式カード', shortName: 'イオンカード', storageKey: 'kagaku-ion-v1', cachePrefix: 'kagaku-ion-',
+    defaultDir: 'ns', dirLabels: { sn: '式 → 名称', ns: '名称 → 式' },
+    levelLabels: { 'イオン:1': '単原子イオン', 'イオン:2': '多原子イオン' }, swSkip: [], iconAccent: [236, 96, 96]
+  }
+];
 
 /* ===================== CSV ===================== */
 function parseCsv(text) {
@@ -105,8 +121,8 @@ function makePng(size, pixel) {
   ]);
 }
 /** 角丸の紺地に 3×3 の白タイル（周期表のモチーフ）。 */
-function iconPixel(size) {
-  const BG = [31, 79, 143], TILE = [255, 255, 255], ACC = [255, 196, 61];
+function iconPixel(size, accent) {
+  const BG = [31, 79, 143], TILE = [255, 255, 255], ACC = accent || [255, 196, 61];
   const r = size * 0.22, pad = size * 0.18, gap = size * 0.035;
   const cell = (size - pad * 2 - gap * 2) / 3;
   return (x, y) => {
@@ -124,45 +140,64 @@ function iconPixel(size) {
 }
 
 /* ===================== ビルド ===================== */
-function build(opts) {
-  opts = opts || {};
-  const cards = loadCards();
-  const setRows = loadSetRows();
+function buildPage(page, checkOnly) {
+  const cards = loadCards(page.csv);
+  const setRows = loadSetRows(page.sets);
   const errs = E.validateCards(cards).concat(E.validateSets(cards, setRows));
   if (errs.length) {
-    console.error('✗ データ検証に失敗（ビルドしません）:');
+    console.error('✗ [' + page.id + '] データ検証に失敗（ビルドしません）: ' + path.relative(ROOT, page.csv));
     errs.forEach((e) => console.error('   - ' + e.msg));
-    process.exit(1);
+    return false;
   }
   const levels = E.levelList(cards);
   const sets = E.buildSets(cards, setRows);
-  console.log('✓ 検証OK: ' + cards.length + '枚 / ' + levels.map((l) => l.category + 'Lv' + l.level + '=' + l.count).join(', ') +
+  if (checkOnly) console.log('✓ [' + page.id + '] 検証OK: ' + cards.length + '枚 / ' + levels.map((l) => l.category + 'Lv' + l.level + '=' + l.count).join(', ') +
     (sets.length ? ' / セット: ' + sets.map((s) => s.name + '=' + s.count + '枚').join(', ') : ''));
-  if (opts.checkOnly) return;
+  if (checkOnly) return true;
 
   const engineSrc = fs.readFileSync(ENGINE_PATH, 'utf8');
+  const swSrc = fs.readFileSync(SW_PATH, 'utf8');
   const dataJson = JSON.stringify(cards.map((c) => ({ category: c.category, level: c.level, name: c.name, symbol: c.symbol, note: c.note })));
   const setsJson = JSON.stringify(setRows);
+  const pageJson = JSON.stringify({ storageKey: page.storageKey, defaultDir: page.defaultDir, dirLabels: page.dirLabels, levelLabels: page.levelLabels });
   let html = fs.readFileSync(TPL_PATH, 'utf8');
-  const version = crypto.createHash('sha1').update(engineSrc + dataJson + setsJson + html + fs.readFileSync(SW_PATH, 'utf8')).digest('hex').slice(0, 10);
-  html = html.split('/*__ENGINE__*/').join(engineSrc)
+  const version = crypto.createHash('sha1').update(engineSrc + dataJson + setsJson + pageJson + html + swSrc + JSON.stringify(page)).digest('hex').slice(0, 10);
+  html = html.split('"__PAGE__"').join(pageJson)
+    .split('__TITLE__').join(E.escapeHtml(page.title))
+    .split('__SHORT_NAME__').join(E.escapeHtml(page.shortName))
     .split('"__DATA__"').join(dataJson)
     .split('"__SETS__"').join(setsJson)
+    .split('__VERSION__').join(version)
+    .split('/*__ENGINE__*/').join(engineSrc);
+  if (/__(DATA|SETS|ENGINE|PAGE|TITLE|SHORT_NAME)__/.test(html)) throw new Error('テンプレートのプレースホルダ置換に失敗');
+  const sw = swSrc.split('__CACHE_PREFIX__').join(page.cachePrefix)
+    .split('"__SW_SKIP__"').join(JSON.stringify(page.swSkip))
     .split('__VERSION__').join(version);
-  if (html.indexOf('__DATA__') >= 0 || html.indexOf('__SETS__') >= 0 || html.indexOf('__ENGINE__') >= 0) throw new Error('テンプレートのプレースホルダ置換に失敗');
+  if (/__(CACHE_PREFIX|SW_SKIP|VERSION)__/.test(sw)) throw new Error('sw.js のプレースホルダ置換に失敗');
 
-  fs.mkdirSync(DIST, { recursive: true });
-  fs.writeFileSync(path.join(DIST, 'index.html'), html);
-  fs.writeFileSync(path.join(DIST, 'sw.js'), fs.readFileSync(SW_PATH, 'utf8').split('__VERSION__').join(version));
-  fs.writeFileSync(path.join(DIST, 'manifest.webmanifest'), JSON.stringify({
-    name: '元素記号・化学式カード', short_name: '化学カード', start_url: './', scope: './', display: 'standalone',
+  const out = page.out;
+  fs.mkdirSync(out, { recursive: true });
+  fs.writeFileSync(path.join(out, 'index.html'), html);
+  fs.writeFileSync(path.join(out, 'sw.js'), sw);
+  fs.writeFileSync(path.join(out, 'manifest.webmanifest'), JSON.stringify({
+    name: page.title, short_name: page.shortName, start_url: './', scope: './', display: 'standalone',
     background_color: '#f6f7f9', theme_color: '#1f4f8f', lang: 'ja',
     icons: [{ src: 'icon-192.png', sizes: '192x192', type: 'image/png' }, { src: 'icon-512.png', sizes: '512x512', type: 'image/png' }]
   }, null, 2));
-  [180, 192, 512].forEach((s) => fs.writeFileSync(path.join(DIST, 'icon-' + s + '.png'), makePng(s, iconPixel(s))));
-  fs.writeFileSync(path.join(DIST, 'version.txt'), version + '\n');
-  console.log('✓ docs/ 生成 (version ' + version + ', index.html ' + (fs.statSync(path.join(DIST, 'index.html')).size / 1024).toFixed(1) + ' KB)');
+  [180, 192, 512].forEach((s) => fs.writeFileSync(path.join(out, 'icon-' + s + '.png'), makePng(s, iconPixel(s, page.iconAccent))));
+  fs.writeFileSync(path.join(out, 'version.txt'), version + '\n');
+  console.log('✓ [' + page.id + '] ' + path.relative(ROOT, out).split(path.sep).join('/') + '/ 生成 (version ' + version + ', index.html ' + (fs.statSync(path.join(out, 'index.html')).size / 1024).toFixed(1) + ' KB)');
+  return true;
 }
 
-module.exports = { loadCards, loadSetRows, parseCsv, build };
+function build(opts) {
+  opts = opts || {};
+  // 全ページを先に検証してから書く（1ページでもNGなら何も書かない）
+  const okAll = PAGES.map((p) => buildPage(p, true)).every(Boolean);
+  if (!okAll) process.exit(1);
+  if (opts.checkOnly) return;
+  PAGES.forEach((p) => buildPage(p, false));
+}
+
+module.exports = { loadCards, loadSetRows, parseCsv, build, PAGES };
 if (require.main === module) build({ checkOnly: process.argv.includes('--check') });

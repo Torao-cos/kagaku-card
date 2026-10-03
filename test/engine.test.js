@@ -314,6 +314,56 @@ t('summary / resetLevel / cardList がセットキーで動く', () => {
   assert.deepStrictEqual(E.summary(cards, st, [SETS[0].key], 'sn', SETS), { total: 55, grad: 0 });
 });
 
+/* ---------- イオン式（/ion/ ページ） ---------- */
+const ION_TOK = {
+  'Ca^2+': ['Ca', '^2+'],
+  'SO4^2-': ['S', 'O', '4', '^2-'],
+  'Cl^-': ['Cl', '^-'],
+  'NH4^+': ['N', 'H', '4', '^+'],
+  'H^+': ['H', '^+']
+};
+Object.keys(ION_TOK).forEach((s) => {
+  t('tokenize ion ' + s, () => assert.deepStrictEqual(E.tokenize(s), ION_TOK[s]));
+});
+t('renderTokens ion: 電荷は <sup>・マイナスは U+2212・^ は出さない', () => {
+  assert.strictEqual(E.renderTokens(E.tokenize('SO4^2-'), 99, true), 'SO<sub>4</sub><sup>2−</sup>');
+  assert.strictEqual(E.renderTokens(E.tokenize('Ca^2+'), 99, true), 'Ca<sup>2+</sup>');
+  assert.strictEqual(E.renderTokens(E.tokenize('Cl^-'), 99, true), 'Cl<sup>−</sup>');
+  assert.strictEqual(E.renderTokens(E.tokenize('NH4^+'), 3, true), 'NH<sub>4</sub><span class="blank">＿</span>');
+  assert.strictEqual(E.renderTokens(E.tokenize('Cl^-'), 1, true), 'Cl<span class="blank">＿</span>');
+  ['H^+', 'Al^3+', 'CO3^2-'].forEach((s) => assert.ok(E.renderTokens(E.tokenize(s), 99, true).indexOf('^') < 0, s));
+});
+t('normalizeSymbol 全角の電荷記号', () => assert.strictEqual(E.normalizeSymbol('SO₄＾2−'), 'SO4^2-'));
+const ions = loadCards(path.join(__dirname, '..', 'data', 'ions.csv'));
+t('ions.csv 検証 PASS・単原子13 / 多原子5', () => {
+  assert.deepStrictEqual(E.validateCards(ions).map((e) => e.msg), []);
+  assert.strictEqual(ions.length, 18);
+  assert.ok(ions.every((c) => c.category === 'イオン'));
+  assert.strictEqual(ions.filter((c) => c.level === 1).length, 13);
+  assert.strictEqual(ions.filter((c) => c.level === 2).length, 5);
+  assert.deepStrictEqual(E.levelList(ions).map((l) => l.key), ['イオン:1', 'イオン:2']);
+  assert.ok(ions.some((c) => c.symbol === 'Fe^2+') && !ions.some((c) => c.symbol === 'Fe^3+'));
+});
+t('validate はイオンの誤りを弾く', () => {
+  const bad = (sym) => E.validateCards([E.normalizeCard({ category: 'イオン', level: 1, name: 'テスト', symbol: sym })]).map((e) => e.msg);
+  ['Ca^2', 'Ca^+2', 'Xx^+', 'Ca^2+^', 'Ca', 'Ca^2+^2+', '^2+'].forEach((s) => assert.ok(bad(s).length > 0, s + ' should fail'));
+  assert.ok(bad('Xx^+').some((m) => /未知の元素記号 "Xx"/.test(m)));
+  assert.deepStrictEqual(bad('Ca^2+'), []);
+  const notIon = E.validateCards([E.normalizeCard({ category: '化学式', level: 1, name: 'テスト', symbol: 'Ca^2+' })]);
+  assert.ok(notIon.some((e) => /イオン だけ/.test(e.msg)));
+});
+t('PAGES: 両ページのCSVが読めて検証PASS・保存キーとキャッシュprefixが別', () => {
+  const { PAGES } = require('../build.js');
+  assert.deepStrictEqual(PAGES.map((p) => p.id), ['main', 'ion']);
+  PAGES.forEach((p) => {
+    const cs = loadCards(p.csv);
+    assert.deepStrictEqual(E.validateCards(cs).concat(E.validateSets(cs, loadSetRows(p.sets))).map((e) => e.msg), [], p.id);
+  });
+  assert.strictEqual(PAGES[0].storageKey, 'kagaku-card-v1');
+  assert.strictEqual(PAGES[1].storageKey, 'kagaku-ion-v1');
+  assert.strictEqual(PAGES[1].defaultDir, 'ns');
+  assert.ok(PAGES[0].cachePrefix.indexOf(PAGES[1].cachePrefix) !== 0 && PAGES[1].cachePrefix.indexOf(PAGES[0].cachePrefix) !== 0);
+});
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -7,11 +7,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="化学カード">
+<meta name="apple-mobile-web-app-title" content="__SHORT_NAME__">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-192.png">
-<title>元素記号・化学式カード</title>
+<title>__TITLE__</title>
 <!--
   app.html — build.js がプレースホルダを差し替えて dist/index.html を作る（単一ファイル・外部読込ゼロ）。
   仕様の正本は ../SPEC.md。カード画面に説明文は置かない（使い方はトップだけ）。
@@ -43,6 +43,7 @@
   .hidden{display:none !important}
   button{font-family:inherit;cursor:pointer}
   sub{font-size:.6em;line-height:0;vertical-align:-0.25em}
+  sup{font-size:.6em;line-height:0;vertical-align:0.6em}
 
   /* ===== トップ ===== */
   #top{max-width:560px;margin:0 auto;padding:14px max(14px,env(safe-area-inset-left)) 40px}
@@ -136,7 +137,7 @@
 
 <!-- ===== トップ ===== -->
 <div id="top">
-  <h1>元素記号・化学式カード</h1>
+  <h1>__TITLE__</h1>
 
   <div class="card">
     <h2>使い方</h2>
@@ -156,8 +157,8 @@
   <div class="card">
     <div class="row"><h2 style="margin:0">方向</h2></div>
     <div class="seg" id="seg-dir">
-      <button data-dir="sn">記号 → 名称</button>
-      <button data-dir="ns">名称 → 記号</button>
+      <button data-dir="sn"></button>
+      <button data-dir="ns"></button>
       <button data-dir="mix">ミックス</button>
     </div>
     <div class="row" style="margin-top:14px">
@@ -220,7 +221,10 @@
   var CARDS = DATA.map(E.normalizeCard);
   var LEVELS = E.levelList(CARDS);
   var SETS = E.buildSets(CARDS, "__SETS__");   // 試験範囲などの名前つきカード集合（data/sets.csv）
-  var KEY = 'kagaku-card-v1';
+  var PAGE = "__PAGE__";   // ページ別設定（build.js の PAGES）
+  var KEY = PAGE.storageKey;
+  var DIR_LABEL = PAGE.dirLabels || E.DIR_LABEL;
+  var LEVEL_LABEL = PAGE.levelLabels || {};
   var $ = function (id) { return document.getElementById(id); };
 
   /* ===================== 保存 ===================== */
@@ -228,12 +232,13 @@
     try {
       var s = JSON.parse(localStorage.getItem(KEY) || 'null');
       if (s && s.version === 1 && s.settings && s.items) {
-        if (['sn', 'ns', 'mix'].indexOf(s.settings.dir) < 0) s.settings.dir = 'sn';
+        if (['sn', 'ns', 'mix'].indexOf(s.settings.dir) < 0) s.settings.dir = PAGE.defaultDir;
         if (!Array.isArray(s.settings.levels)) s.settings.levels = [];
         return s;
       }
     } catch (e) { /* 壊れていたら初期化 */ }
-    return E.emptyStore();
+    var fresh = E.emptyStore(); fresh.settings.dir = PAGE.defaultDir;
+    return fresh;
   }
   var store = load();
   function save() { try { localStorage.setItem(KEY, JSON.stringify(store)); } catch (e) { /* 容量不足等は無視 */ } }
@@ -246,7 +251,11 @@
   /* ===================== トップ描画 ===================== */
   function renderTop() {
     var d = store.settings.dir, f = !!store.settings.freq;
-    Array.prototype.forEach.call($('seg-dir').children, function (b) { b.classList.toggle('on', b.getAttribute('data-dir') === d); });
+    Array.prototype.forEach.call($('seg-dir').children, function (b) {
+      var bd = b.getAttribute('data-dir');
+      if (DIR_LABEL[bd]) b.textContent = DIR_LABEL[bd];
+      b.classList.toggle('on', bd === d);
+    });
     $('sw-freq').classList.toggle('on', f); $('sw-freq').setAttribute('aria-checked', String(f));
     $('freq-desc').textContent = f ? 'ON：「覚えた」を押したカードは出にくくなり、2回続けると出なくなる' : 'OFF：全部のカードが均等に出る（記録しない）';
 
@@ -255,7 +264,7 @@
     dirs().forEach(function (dd) {
       var s = E.summary(CARDS, store, store.settings.levels, dd, SETS);
       var pct = s.total ? Math.round(100 * s.grad / s.total) : 0;
-      sumHtml += '<div class="sumline"><span>' + (dirs().length > 1 ? E.DIR_LABEL[dd] + '　' : '') + '覚えた</span><span>' + s.grad + ' / ' + s.total + '</span></div>' +
+      sumHtml += '<div class="sumline"><span>' + (dirs().length > 1 ? DIR_LABEL[dd] + '　' : '') + '覚えた</span><span>' + s.grad + ' / ' + s.total + '</span></div>' +
         '<div class="bar"><i style="width:' + pct + '%"></i></div>';
     });
     $('sum').innerHTML = sumHtml;
@@ -284,7 +293,7 @@
     var lastCat = null;
     LEVELS.forEach(function (l) {
       if (l.category !== lastCat) { html += (lastCat ? '<div style="height:10px"></div>' : '') + '<h2 style="margin-top:4px">' + E.escapeHtml(l.category) + '</h2>'; lastCat = l.category; }
-      html += rangeRow(l.key, 'Lv' + l.level, E.cardsForKey(CARDS, l.key, SETS));
+      html += rangeRow(l.key, LEVEL_LABEL[l.key] ? E.escapeHtml(LEVEL_LABEL[l.key]) : 'Lv' + l.level, E.cardsForKey(CARDS, l.key, SETS));
     });
     $('levels').innerHTML = html;
 
@@ -318,6 +327,7 @@
   var detailKey = null;
   function keyLabel(key) {
     if (E.isSetKey(key)) return key.slice(4);
+    if (LEVEL_LABEL[key]) return LEVEL_LABEL[key];
     var parts = key.split(':'); return parts[0] + ' Lv' + parts[1];
   }
   function openDetail(lk) {
@@ -333,7 +343,7 @@
   }
   function renderDetail() {
     var ds = dirs();
-    $('detail-title').textContent = keyLabel(detailKey) + '（' + ds.map(function (d) { return E.DIR_LABEL[d]; }).join(' / ') + '）';
+    $('detail-title').textContent = keyLabel(detailKey) + '（' + ds.map(function (d) { return DIR_LABEL[d]; }).join(' / ') + '）';
     var list = E.cardList(CARDS, store, detailKey, ds, SETS);
     var html = '';
     list.forEach(function (row) {
@@ -467,7 +477,7 @@
     var b = e.target.closest('button[data-rst]'); if (!b) return;
     e.preventDefault();
     var lk = b.getAttribute('data-rst');
-    var label = keyLabel(lk) + (dirs().length > 1 ? '' : '（' + E.DIR_LABEL[dirs()[0]] + '）');
+    var label = keyLabel(lk) + (dirs().length > 1 ? '' : '（' + DIR_LABEL[dirs()[0]] + '）');
     if (!confirm(label + ' の学習記録をリセットします。いいですか？')) return;
     dirs().forEach(function (d) { E.resetLevel(store, CARDS, lk, d, SETS); });
     save(); renderTop();

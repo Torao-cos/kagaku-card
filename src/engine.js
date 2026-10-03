@@ -33,6 +33,8 @@
 
   var DIRS = ['sn', 'ns'];   // sn = 記号→名称（既定） / ns = 名称→記号
   var DIR_LABEL = { sn: '記号 → 名称', ns: '名称 → 記号' };
+  var CATEGORIES = ['元素記号', '化学式', 'イオン'];   // 並び順もこの順
+  var CAT_ORDER = { '元素記号': 0, '化学式': 1, 'イオン': 2 };
 
   /* 118元素（検証用。データの誤字を弾く） */
   var ELEMENTS = ('H He Li Be B C N O F Ne Na Mg Al Si P S Cl Ar K Ca Sc Ti V Cr Mn Fe Co Ni Cu Zn Ga Ge As Se Br Kr ' +
@@ -52,6 +54,7 @@
       .replace(/[₀-₉]/g, function (c) { return SUBS[c]; })
       .replace(/[Ⅰ-Ⅹ]/g, function (c) { return ROMAN[c]; })
       .replace(/（/g, '(').replace(/）/g, ')')
+      .replace(/＾/g, '^').replace(/[−－]/g, '-').replace(/＋/g, '+')
       .replace(/\s+/g, '');
   }
   function normalizeName(s) {
@@ -72,6 +75,7 @@
    * tokenize('Ca(OH)2') → ['Ca','(','O','H',')','2']
    * 単位: 元素記号 [A-Z][a-z]? ／ 連続数字 ／ 連続ローマ数字（[IVX]{2,}）／ それ以外1文字
    * ローマ数字判定を元素記号より先に見る（'III' の先頭 'I' をヨウ素にしない）。単独の I / V は元素記号。
+   * イオンの電荷: '^' ＋ 数字(任意) ＋ '+'/'-' を1単位 → 'SO4^2-' は ['S','O','4','^2-']（表示時は '^' を消して上付き）
    */
   function tokenize(str) {
     var s = String(str || '');
@@ -80,6 +84,7 @@
     while (i < s.length) {
       var c = s[i];
       var m;
+      if (c === '^' && (m = /^\^[0-9]*[+-]/.exec(s.slice(i)))) { out.push(m[0]); i += m[0].length; continue; }
       if ((m = /^[IVX]{2,}/.exec(s.slice(i)))) { out.push(m[0]); i += m[0].length; continue; }
       if (/[A-Z]/.test(c)) {
         var t = c;
@@ -95,6 +100,8 @@
     return out;
   }
 
+  function isCharge(t) { return /^\^[0-9]*[+-]$/.test(t); }
+
   function escapeHtml(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
@@ -103,6 +110,7 @@
    * トークン列 → HTML。
    *  - revealed: 先頭から何単位を見せるか（= tokens.length で全表示）
    *  - subscript: true なら数字トークンを <sub> にする（化学式側）
+   *  - 電荷トークン（'^2-' 等）は常に <sup>。'^' は出さず、マイナスは U+2212
    *  - 未表示の単位は '＿' 1個で長さだけ示す
    */
   function renderTokens(tokens, revealed, subscript) {
@@ -111,7 +119,8 @@
     for (var i = 0; i < tokens.length; i++) {
       var t = tokens[i];
       if (i < n) {
-        if (subscript && /^[0-9]+$/.test(t)) html += '<sub>' + escapeHtml(t) + '</sub>';
+        if (isCharge(t)) html += '<sup>' + escapeHtml(t.slice(1).replace('-', '\u2212')) + '</sup>';
+        else if (subscript && /^[0-9]+$/.test(t)) html += '<sub>' + escapeHtml(t) + '</sub>';
         else html += escapeHtml(t);
       } else {
         html += '<span class="blank">＿</span>';
@@ -147,7 +156,7 @@
     var seen = Object.create(null);
     cards.forEach(function (c, idx) {
       var where = (idx + 2) + '行目 ' + (c.name || '?') + ' / ' + (c.symbol || '?');
-      if (c.category !== '元素記号' && c.category !== '化学式') errs.push({ row: idx, msg: where + ': category は 元素記号/化学式 のみ' });
+      if (CATEGORIES.indexOf(c.category) < 0) errs.push({ row: idx, msg: where + ': category は ' + CATEGORIES.join('/') + ' のみ' });
       if (!(c.level >= 1 && c.level <= 9)) errs.push({ row: idx, msg: where + ': level は 1〜9 の整数' });
       if (!c.name) errs.push({ row: idx, msg: where + ': name が空' });
       if (!c.symbol) errs.push({ row: idx, msg: where + ': symbol が空' });
@@ -155,14 +164,21 @@
       seen[c.id] = true;
       // 化学式の健全性
       var depth = 0, ok = true;
-      tokenize(c.symbol).forEach(function (t) {
-        if (t === '(') depth++;
+      var stoks = tokenize(c.symbol), charges = 0;
+      stoks.forEach(function (t, ti) {
+        if (isCharge(t)) {
+          charges++;
+          if (c.category !== 'イオン') errs.push({ row: idx, msg: where + ': 電荷 "^" は イオン だけで使える' });
+          else if (ti !== stoks.length - 1 || ti === 0) errs.push({ row: idx, msg: where + ': 電荷は式の末尾に1回だけ（例 SO4^2-）' });
+        }
+        else if (t === '(') depth++;
         else if (t === ')') { depth--; if (depth < 0) ok = false; }
         else if (/^[A-Z][a-z]?$/.test(t)) { if (!ELEMENT_SET[t]) errs.push({ row: idx, msg: where + ': 未知の元素記号 "' + t + '"' }); }
         else if (/^[0-9]+$/.test(t)) { /* ok */ }
         else errs.push({ row: idx, msg: where + ': symbol に使えない文字 "' + t + '"' });
       });
       if (depth !== 0 || !ok) errs.push({ row: idx, msg: where + ': 括弧の対応が取れていない' });
+      if (c.category === 'イオン' && charges !== 1) errs.push({ row: idx, msg: where + ': イオンは電荷を末尾に1回だけ書く（例 Ca^2+ / Cl^-）' });
       if (c.category === '元素記号' && !ELEMENT_SET[c.symbol]) errs.push({ row: idx, msg: where + ': 元素記号として実在しない' });
       if (tokenize(c.symbol).join('') !== c.symbol) errs.push({ row: idx, msg: where + ': tokenize 往復不一致(symbol)' });
       if (tokenize(c.name).join('') !== c.name) errs.push({ row: idx, msg: where + ': tokenize 往復不一致(name)' });
@@ -236,7 +252,6 @@
    * 戻り値: [{ key, dir, face, answer, faceIsFormula, answerIsFormula, note, cardIds:[..] }]
    */
   function buildItems(selectedCards, dirs) {
-    var CAT_ORDER = { '元素記号': 0, '化学式': 1 };
     function catRank(c) { return CAT_ORDER[c] === undefined ? 9 : CAT_ORDER[c]; }
     var items = [];
     (dirs || DIRS).forEach(function (dir) {
@@ -454,7 +469,6 @@
 
   /** レベル一覧（カテゴリ順・レベル昇順） */
   function levelList(cards) {
-    var CAT_ORDER = { '元素記号': 0, '化学式': 1 };
     var seen = Object.create(null), list = [];
     cards.forEach(function (c) {
       var lk = levelKey(c);
@@ -470,9 +484,9 @@
   }
 
   return {
-    CONFIG: CONFIG, DIRS: DIRS, DIR_LABEL: DIR_LABEL, ELEMENTS: ELEMENTS,
+    CONFIG: CONFIG, DIRS: DIRS, DIR_LABEL: DIR_LABEL, CATEGORIES: CATEGORIES, ELEMENTS: ELEMENTS,
     normalizeSymbol: normalizeSymbol, normalizeName: normalizeName, normalizeCard: normalizeCard,
-    tokenize: tokenize, renderTokens: renderTokens, escapeHtml: escapeHtml,
+    tokenize: tokenize, isCharge: isCharge, renderTokens: renderTokens, escapeHtml: escapeHtml,
     cardId: cardId, levelKey: levelKey, itemKey: itemKey,
     validateCards: validateCards, selectCards: selectCards, cardsForKey: cardsForKey, buildItems: buildItems,
     setKey: setKey, isSetKey: isSetKey, buildSets: buildSets, validateSets: validateSets,
