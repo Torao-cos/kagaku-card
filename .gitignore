@@ -4,3 +4,4 @@ node_modules/
 .env.*
 *.log
 _shots/
+data/drafts/
