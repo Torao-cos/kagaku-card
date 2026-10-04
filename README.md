@@ -6,6 +6,7 @@
 - 仕様の正本: [`SPEC.md`](SPEC.md)
 - データ（唯一の編集箇所）: [`data/cards.csv`](data/cards.csv)
 - 別ページ **中2理科A テスト対策カード**（`/chu2/`）: 用語 [`data/chu2-terms-2026-vol3.csv`](data/chu2-terms-2026-vol3.csv)（section/description/term を使用・kubun/source/note は表示しない）＋イオン式 [`data/ions.csv`](data/ions.csv)（電荷は `Ca^2+` `SO4^2-` のように `^` の後ろ）。向きは用語・イオン式で別設定。保存キー・SW キャッシュはトップと別。詳細は SPEC §8.5
+- 別ページ **中1理科A テスト対策カード**（`/chu1/`）: 用語のみ [`data/chu1-terms-2026.csv`](data/chu1-terms-2026.csv)（中2と同じ列・同じ仕組み。元素記号・化学式カードとは別ページ）。保存キー `kagaku-chu1-v1`
 
 ## 使い方（学習者）
 

@@ -354,17 +354,24 @@ t('validate はイオンの誤りを弾く', () => {
 });
 t('PAGES: 両ページのCSVが読めて検証PASS・保存キーとキャッシュprefixが別', () => {
   const { PAGES, loadPageCards } = require('../build.js');
-  assert.deepStrictEqual(PAGES.map((p) => p.id), ['main', 'chu2']);
+  assert.deepStrictEqual(PAGES.map((p) => p.id), ['main', 'chu1', 'chu2']);
   PAGES.forEach((p) => {
     const cs = loadPageCards(p).cards;
     assert.deepStrictEqual(E.validateCards(cs).concat(E.validateSets(cs, loadSetRows(p.sets))).map((e) => e.msg), [], p.id);
   });
   assert.strictEqual(PAGES[0].storageKey, 'kagaku-card-v1');
-  assert.strictEqual(PAGES[1].storageKey, 'kagaku-chu2-v1');
-  assert.strictEqual(PAGES[1].cachePrefix, 'kagaku-chu2-');
-  assert.strictEqual(PAGES[1].out, path.join(__dirname, '..', 'docs', 'chu2'));
-  assert.deepStrictEqual(PAGES[0].swSkip, ['chu2/']);
-  assert.ok(PAGES[0].cachePrefix.indexOf(PAGES[1].cachePrefix) !== 0 && PAGES[1].cachePrefix.indexOf(PAGES[0].cachePrefix) !== 0);
+  const byId = {}; PAGES.forEach((p) => { byId[p.id] = p; });
+  assert.strictEqual(byId.chu1.storageKey, 'kagaku-chu1-v1');
+  assert.strictEqual(byId.chu2.storageKey, 'kagaku-chu2-v1');
+  assert.strictEqual(byId.chu2.cachePrefix, 'kagaku-chu2-');
+  assert.strictEqual(byId.chu1.out, path.join(__dirname, '..', 'docs', 'chu1'));
+  assert.strictEqual(byId.chu2.out, path.join(__dirname, '..', 'docs', 'chu2'));
+  assert.deepStrictEqual(PAGES[0].swSkip, ['chu1/', 'chu2/']);
+  PAGES.forEach((a, i) => PAGES.forEach((b, j) => {
+    if (i === j) return;
+    assert.notStrictEqual(a.storageKey, b.storageKey);
+    assert.ok(a.cachePrefix.indexOf(b.cachePrefix) !== 0, a.id + ' / ' + b.id);
+  }));
 });
 
 /* ---------- 中2テスト対策（/chu2/ ページ: 用語＋イオン式） ---------- */

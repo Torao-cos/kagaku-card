@@ -29,7 +29,23 @@ const PAGES = [
   {
     id: 'main', csv: CSV_PATH, sets: SETS_PATH, out: DIST,
     title: '元素記号・化学式カード', shortName: '化学カード', storageKey: 'kagaku-card-v1', cachePrefix: 'kagaku-card-',
-    defaultDir: 'sn', dirLabels: null, levelLabels: {}, swSkip: ['chu2/'], iconAccent: [255, 196, 61]
+    defaultDir: 'sn', dirLabels: null, levelLabels: {}, swSkip: ['chu1/', 'chu2/'], iconAccent: [255, 196, 61]
+  },
+  {
+    // 中1テスト対策: 用語のみ（元素記号・化学式カードとは別ページ）
+    id: 'chu1', terms: path.join(ROOT, 'data', 'chu1-terms-2026.csv'), sets: path.join(ROOT, 'data', 'chu1-sets.csv'), out: path.join(DIST, 'chu1'),
+    title: '中1理科A テスト対策カード', shortName: '中1理科Aカード', storageKey: 'kagaku-chu1-v1', cachePrefix: 'kagaku-chu1-',
+    defaultDir: 'sn', dirLabels: null,
+    dirGroups: [
+      { category: '用語', heading: '用語の向き', labels: { sn: '説明 → 用語', ns: '用語 → 説明' }, def: 'sn' }
+    ],
+    howto: [
+      '<b>答えの面</b>をタップ → 答えが出る。<b>もう一度タップ、または左にスワイプ → 次のカード</b>',
+      '<b>右にスワイプ</b> → 前のカードに戻る（押し直しできる）',
+      '<b>頻度調整</b>（はじめはON）：「<b>覚えた</b>」を押したカードは出にくくなり、<b>2回続けて押す</b>と出なくなる。押さずに次へ進むと元に戻る。試験前に全部見たいときはOFFに',
+      '<b>問題の面</b>をタップすると答えが少しずつ開く（ヒント）'
+    ],
+    levelLabels: {}, swSkip: [], iconAccent: [84, 180, 120]
   },
   {
     // 中2テスト対策: 用語（terms CSV・section ごとに1範囲）＋イオン式。向きはカテゴリごとに別設定
@@ -107,7 +123,7 @@ function loadTerms(csvPath, labels) {
 /** ページのカード（用語 → その他の順）とレベル名 */
 function loadPageCards(page) {
   const labels = Object.assign({}, page.levelLabels);
-  const cards = (page.terms ? loadTerms(page.terms, labels) : []).concat(loadCards(page.csv));
+  const cards = (page.terms ? loadTerms(page.terms, labels) : []).concat(page.csv ? loadCards(page.csv) : []);
   return { cards, labels };
 }
 
@@ -184,7 +200,7 @@ function buildPage(page, checkOnly) {
   const setRows = loadSetRows(page.sets);
   const errs = E.validateCards(cards).concat(E.validateSets(cards, setRows));
   if (errs.length) {
-    console.error('✗ [' + page.id + '] データ検証に失敗（ビルドしません）: ' + path.relative(ROOT, page.csv));
+    console.error('✗ [' + page.id + '] データ検証に失敗（ビルドしません）: ' + path.relative(ROOT, page.csv || page.terms));
     errs.forEach((e) => console.error('   - ' + e.msg));
     return false;
   }

@@ -2,9 +2,9 @@
  * VERSION / CACHE_PREFIX / SW_SKIP のプレースホルダは build.js がページごとに差し替える。
  * 同一オリジンに複数ページ（/ と /chu2/）が並ぶため、消すのは自分の prefix のキャッシュだけ。
  * SKIP（scope からの相対パス）配下は別ページの SW の担当なので触らない。 */
-var PREFIX = 'kagaku-card-';
-var CACHE = PREFIX + '7eef91514e';
-var SKIP = ["chu1/","chu2/"];
+var PREFIX = 'kagaku-chu1-';
+var CACHE = PREFIX + '7182a57c6d';
+var SKIP = [];
 var ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-180.png'];
 
 self.addEventListener('install', function (e) {
