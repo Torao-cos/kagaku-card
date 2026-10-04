@@ -10,7 +10,7 @@
     "serve": "node tools/serve.js",
     "deploy": "node tools/deploy.js",
     "push": "node tools/push.js",
-    "ship": "npm test && npm run build && npm run deploy && npm run push"
+    "ship": "npm test && npm run build && npm run push"
   },
   "license": "MIT"
 }

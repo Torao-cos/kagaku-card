@@ -24,14 +24,14 @@
 #    または owner 書式のテキストから変換して追記:
 node tools/import-list.js 化学式 新しいリスト.txt --append
 
-# 2) 検証 → テスト → ビルド → デプロイ を1コマンドで
+# 2) テスト → 検証・ビルド → GitHub へ push（＝GitHub Pages に公開）を1コマンドで。先に commit しておく
 npm run ship
 ```
 
 - カードIDは `category:name:symbol` の内容ベース。行の並べ替え・追加・削除で学習履歴は壊れません
 - 元素記号の誤字（実在しない記号）、括弧の不一致、重複行はビルド前に機械的に弾かれます
 - 生徒側への反映は「次の次の起動」（Service Worker の stale-while-revalidate）
-- 公開URL: GitHub Pages https://torao-cos.github.io/kagaku-card/ （メイン）／Cloudflare https://kagaku-card.pages.dev/ （中2理科Aはそれぞれ末尾に `chu2/`）
+- 公開URL: GitHub Pages https://torao-cos.github.io/kagaku-card/ （中2理科Aは末尾に `chu2/`）。Cloudflare https://kagaku-card.pages.dev/ は配布済みの中1用として残すが更新しない（`npm run deploy` は通常使わない）
 
 ## 開発
 
