@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * build.js — data/*.csv + src/engine.js + src/app.html → ページごとに docs/（元素記号・化学式）と docs/ion/（イオン式）
+ * build.js — data/*.csv + src/engine.js + src/app.html → ページごとに docs/（中1 元素記号・化学式）と docs/chu2/（中2 用語＋イオン式）
  *            （各フォルダに単一 index.html ＋ sw.js ＋ manifest ＋ アイコン）
  * 外部依存なし。Node 18+。
  *
@@ -29,12 +29,25 @@ const PAGES = [
   {
     id: 'main', csv: CSV_PATH, sets: SETS_PATH, out: DIST,
     title: '元素記号・化学式カード', shortName: '化学カード', storageKey: 'kagaku-card-v1', cachePrefix: 'kagaku-card-',
-    defaultDir: 'sn', dirLabels: null, levelLabels: {}, swSkip: ['ion/'], iconAccent: [255, 196, 61]
+    defaultDir: 'sn', dirLabels: null, levelLabels: {}, swSkip: ['chu2/'], iconAccent: [255, 196, 61]
   },
   {
-    id: 'ion', csv: path.join(ROOT, 'data', 'ions.csv'), sets: path.join(ROOT, 'data', 'ion-sets.csv'), out: path.join(DIST, 'ion'),
-    title: 'イオン式カード', shortName: 'イオンカード', storageKey: 'kagaku-ion-v1', cachePrefix: 'kagaku-ion-',
-    defaultDir: 'ns', dirLabels: { sn: '式 → 名称', ns: '名称 → 式' },
+    // 中2テスト対策: 用語（terms CSV・section ごとに1範囲）＋イオン式。向きはカテゴリごとに別設定
+    id: 'chu2', terms: path.join(ROOT, 'data', 'chu2-terms-2026-vol3.csv'),
+    csv: path.join(ROOT, 'data', 'ions.csv'), sets: path.join(ROOT, 'data', 'chu2-sets.csv'), out: path.join(DIST, 'chu2'),
+    title: '中2化学 テスト対策カード', shortName: '中2化学カード', storageKey: 'kagaku-chu2-v1', cachePrefix: 'kagaku-chu2-',
+    defaultDir: 'ns', dirLabels: null,
+    dirGroups: [
+      { category: '用語', heading: '用語の向き', labels: { sn: '説明 → 用語', ns: '用語 → 説明' }, def: 'sn' },
+      { category: 'イオン', heading: 'イオン式の向き', labels: { sn: '式 → 名称', ns: '名称 → 式' }, def: 'ns' }
+    ],
+    catLabels: { 'イオン': 'イオン式' },
+    howto: [
+      '<b>答えの面</b>をタップ → 答えが出る。<b>もう一度タップ、または左にスワイプ → 次のカード</b>',
+      '<b>右にスワイプ</b> → 前のカードに戻る（押し直しできる）',
+      '<b>頻度調整</b>（はじめはON）：「<b>覚えた</b>」を押したカードは出にくくなり、<b>2回続けて押す</b>と出なくなる。押さずに次へ進むと元に戻る。試験前に全部見たいときはOFFに',
+      '<b>問題の面</b>をタップすると答えが少しずつ開く（ヒント）'
+    ],
     levelLabels: { 'イオン:1': '単原子イオン', 'イオン:2': '多原子イオン' }, swSkip: [], iconAccent: [236, 96, 96]
   }
 ];
@@ -70,6 +83,32 @@ function loadCards(csvPath) {
     category: r[idx('category')], level: r[idx('level')], name: r[idx('name')], symbol: r[idx('symbol')],
     note: idx('note') >= 0 ? r[idx('note')] : ''
   }));
+}
+
+/**
+ * 用語CSV（section,description,term,…）→ 正規化カード。使うのは section（範囲）・description・term だけ。
+ * section はファイル順に level 1,2,… を振り、labels に { '用語:n': section } を入れる。kubun/source/note は読まない。
+ */
+function loadTerms(csvPath, labels) {
+  const rows = parseCsv(fs.readFileSync(csvPath, 'utf8'));
+  const header = rows[0].map((h) => h.trim());
+  const idx = (name) => header.indexOf(name);
+  ['section', 'description', 'term'].forEach((h) => {
+    if (idx(h) < 0) throw new Error('用語CSV ヘッダに ' + h + ' がない: ' + header.join(','));
+  });
+  const secs = [];
+  return rows.slice(1).map((r) => {
+    const sec = r[idx('section')].trim();
+    if (secs.indexOf(sec) < 0) { secs.push(sec); if (labels) labels['用語:' + secs.length] = sec; }
+    return E.normalizeCard({ category: '用語', level: secs.indexOf(sec) + 1, name: r[idx('term')], symbol: r[idx('description')], note: '' });
+  });
+}
+
+/** ページのカード（用語 → その他の順）とレベル名 */
+function loadPageCards(page) {
+  const labels = Object.assign({}, page.levelLabels);
+  const cards = (page.terms ? loadTerms(page.terms, labels) : []).concat(loadCards(page.csv));
+  return { cards, labels };
 }
 
 /** data/sets.csv → 行配列 [{set, category, level, symbol}]（無ければ空） */
@@ -141,7 +180,7 @@ function iconPixel(size, accent) {
 
 /* ===================== ビルド ===================== */
 function buildPage(page, checkOnly) {
-  const cards = loadCards(page.csv);
+  const { cards, labels } = loadPageCards(page);
   const setRows = loadSetRows(page.sets);
   const errs = E.validateCards(cards).concat(E.validateSets(cards, setRows));
   if (errs.length) {
@@ -159,7 +198,10 @@ function buildPage(page, checkOnly) {
   const swSrc = fs.readFileSync(SW_PATH, 'utf8');
   const dataJson = JSON.stringify(cards.map((c) => ({ category: c.category, level: c.level, name: c.name, symbol: c.symbol, note: c.note })));
   const setsJson = JSON.stringify(setRows);
-  const pageJson = JSON.stringify({ storageKey: page.storageKey, defaultDir: page.defaultDir, dirLabels: page.dirLabels, levelLabels: page.levelLabels });
+  const pageJson = JSON.stringify({
+    storageKey: page.storageKey, defaultDir: page.defaultDir, dirLabels: page.dirLabels, levelLabels: labels,
+    dirGroups: page.dirGroups || null, catLabels: page.catLabels || null, howto: page.howto || null
+  });
   let html = fs.readFileSync(TPL_PATH, 'utf8');
   const version = crypto.createHash('sha1').update(engineSrc + dataJson + setsJson + pageJson + html + swSrc + JSON.stringify(page)).digest('hex').slice(0, 10);
   html = html.split('"__PAGE__"').join(pageJson)
@@ -199,5 +241,5 @@ function build(opts) {
   PAGES.forEach((p) => buildPage(p, false));
 }
 
-module.exports = { loadCards, loadSetRows, parseCsv, build, PAGES };
+module.exports = { loadCards, loadTerms, loadPageCards, loadSetRows, parseCsv, build, PAGES };
 if (require.main === module) build({ checkOnly: process.argv.includes('--check') });

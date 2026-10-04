@@ -7,11 +7,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="イオンカード">
+<meta name="apple-mobile-web-app-title" content="中2化学カード">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-192.png">
-<title>イオン式カード</title>
+<title>中2化学 テスト対策カード</title>
 <!--
   app.html — build.js がプレースホルダを差し替えて dist/index.html を作る（単一ファイル・外部読込ゼロ）。
   仕様の正本は ../SPEC.md。カード画面に説明文は置かない（使い方はトップだけ）。
@@ -102,6 +102,10 @@
   .face .txt{line-height:1.25}
   .face.formula .txt{font-size:clamp(40px,13vw,80px);font-weight:700;letter-spacing:.01em;font-family:"Helvetica Neue",Arial,"Noto Sans JP",sans-serif}
   .face.jp .txt{font-size:clamp(28px,8.5vw,52px);font-weight:700}
+  /* 用語など長い日本語（plain カードだけ。文字数で段階的に小さく） */
+  .face.jp.long,.face.jp.xlong{word-break:normal}
+  .face.jp.long .txt{font-size:clamp(22px,6.6vw,34px)}
+  .face.jp.xlong .txt{font-size:clamp(18px,5.4vw,26px);font-weight:600;line-height:1.55;text-align:left}
   .face .blank{color:var(--blank);margin:0 1px}
   .face .note{display:block;margin-top:10px;font-size:14px;font-weight:400;color:var(--muted)}
   /* 「覚えた」ボタン1つ。幅いっぱいにせず右寄せ＝「次へ」の形に見せない（進む操作はタップ/スワイプ） */
@@ -114,6 +118,8 @@
     .marks button{height:48px;font-size:17px}
     .face.formula .txt{font-size:clamp(36px,9vh,72px)}
     .face.jp .txt{font-size:clamp(24px,6.5vh,44px)}
+    .face.jp.long .txt{font-size:clamp(20px,5.6vh,30px)}
+    .face.jp.xlong .txt{font-size:clamp(16px,4.8vh,22px)}
   }
   /* ===== カード一覧（別画面） ===== */
   #detail{max-width:560px;margin:0 auto;padding:6px max(14px,env(safe-area-inset-left)) 40px}
@@ -124,6 +130,7 @@
   .drow .nm{flex:1;min-width:0;font-size:15px;overflow-wrap:anywhere}
   .drow .stt{flex:none;font-size:12px;color:var(--muted);min-width:4.5em;text-align:right}
   .drow .stt.g{color:var(--ok);font-weight:700}
+  .drow .desc{display:block;font-size:13px;color:var(--muted);line-height:1.45}
   .drow .rst{flex:none;border:1px solid var(--line);background:var(--card);color:var(--muted);border-radius:8px;font-size:12px;padding:5px 8px;visibility:hidden}
   .drow.has .rst{visibility:visible}
   .lvl .lst{flex:none;border:1px solid var(--line);background:var(--card);color:var(--accent);border-radius:8px;font-size:12px;padding:5px 7px}
@@ -137,11 +144,11 @@
 
 <!-- ===== トップ ===== -->
 <div id="top">
-  <h1>イオン式カード</h1>
+  <h1>中2化学 テスト対策カード</h1>
 
   <div class="card">
     <h2>使い方</h2>
-    <ul class="howto">
+    <ul class="howto" id="howto">
       <li><b>問題の面</b>をタップ → 答えが1つずつ開く（ヒント）</li>
       <li><b>答えの面</b>をタップ → 答えが全部出る。<b>もう一度タップ、または左にスワイプ → 次のカード</b></li>
       <li><b>右にスワイプ</b> → 前のカードに戻る（押し直しできる）</li>
@@ -155,12 +162,7 @@
   </div>
 
   <div class="card">
-    <div class="row"><h2 style="margin:0">方向</h2></div>
-    <div class="seg" id="seg-dir">
-      <button data-dir="sn"></button>
-      <button data-dir="ns"></button>
-      <button data-dir="mix">ミックス</button>
-    </div>
+    <div id="dirs"></div>
     <div class="row" style="margin-top:14px">
       <div><h2 style="margin:0">頻度調整</h2><div class="muted" id="freq-desc"></div></div>
       <button class="switch" id="sw-freq" role="switch" aria-checked="false" aria-label="頻度調整"></button>
@@ -176,7 +178,7 @@
   <button class="btn" id="btn-start">はじめる</button>
   <div style="height:22px"></div>
   <button class="btn warn" id="btn-reset-all">学習記録を全部リセット</button>
-  <div class="ver">vda914b557c</div>
+  <div class="ver">v0551878332</div>
 </div>
 
 <!-- ===== カード一覧（レベル内の1枚ずつ戻す） ===== -->
@@ -247,8 +249,34 @@
 
   var DIRS = ['sn', 'ns'];   // sn = 記号→名称（既定） / ns = 名称→記号
   var DIR_LABEL = { sn: '記号 → 名称', ns: '名称 → 記号' };
-  var CATEGORIES = ['元素記号', '化学式', 'イオン'];   // 並び順もこの順
-  var CAT_ORDER = { '元素記号': 0, '化学式': 1, 'イオン': 2 };
+  var CATEGORIES = ['元素記号', '化学式', 'イオン', '用語'];
+  var CAT_ORDER = { '用語': -1, '元素記号': 0, '化学式': 1, 'イオン': 2 };
+
+  /* カテゴリ別の設定。dirs = 出題できる方向／plain = 普通の文章（記号の正規化・元素チェック・下付きなし）。
+   * 用語は symbol = 説明文（sn の問題面）・name = 用語 として持つ */
+  var CAT_CONF = {
+    '用語': { plain: true }
+  };
+  function catConf(category) {
+    var c = CAT_CONF[category] || {};
+    return { dirs: c.dirs || DIRS, plain: !!c.plain };
+  }
+  /**
+   * そのカテゴリで実際に使う方向。dirs は全カテゴリ共通の配列（['sn','ns']）か、
+   * カテゴリ別の指定 { '用語': ['sn'], 'イオン': ['ns'] }（無いカテゴリは両方向）。許可外は除き、空ならカテゴリ既定
+   */
+  function effectiveDirs(category, dirs) {
+    var allowed = catConf(category).dirs;
+    var req = Array.isArray(dirs) ? dirs : ((dirs && dirs[category]) || DIRS);
+    var ds = req.filter(function (d) { return allowed.indexOf(d) >= 0; });
+    return ds.length ? ds : allowed.slice();
+  }
+  /** カード集合で使う方向の和集合（要求順） */
+  function dirsForCards(cardsSubset, dirs) {
+    var out = [];
+    cardsSubset.forEach(function (c) { effectiveDirs(c.category, dirs).forEach(function (d) { if (out.indexOf(d) < 0) out.push(d); }); });
+    return out;
+  }
 
   /* 118元素（検証用。データの誤字を弾く） */
   var ELEMENTS = ('H He Li Be B C N O F Ne Na Mg Al Si P S Cl Ar K Ca Sc Ti V Cr Mn Fe Co Ni Cu Zn Ga Ge As Se Br Kr ' +
@@ -351,11 +379,12 @@
 
   /** CSV 由来の生行 → 正規化カード。level は整数化。 */
   function normalizeCard(row) {
+    var cat = String(row.category || '').trim(), plain = catConf(cat).plain;
     var c = {
-      category: String(row.category || '').trim(),
+      category: cat,
       level: parseInt(row.level, 10),
-      name: normalizeName(row.name),
-      symbol: normalizeSymbol(row.symbol),
+      name: plain ? String(row.name || '').trim() : normalizeName(row.name),
+      symbol: plain ? String(row.symbol || '').trim() : normalizeSymbol(row.symbol),
       note: String(row.note || '').trim()
     };
     c.id = cardId(c);
@@ -367,11 +396,18 @@
    */
   function validateCards(cards) {
     var errs = [];
-    var seen = Object.create(null);
+    var seen = Object.create(null), seenFace = Object.create(null);
     cards.forEach(function (c, idx) {
       var where = (idx + 2) + '行目 ' + (c.name || '?') + ' / ' + (c.symbol || '?');
       if (CATEGORIES.indexOf(c.category) < 0) errs.push({ row: idx, msg: where + ': category は ' + CATEGORIES.join('/') + ' のみ' });
       if (!(c.level >= 1 && c.level <= 9)) errs.push({ row: idx, msg: where + ': level は 1〜9 の整数' });
+      if (catConf(c.category).plain) {
+        if (!c.symbol) errs.push({ row: idx, msg: where + ': 問題文が空' });
+        if (!c.name) errs.push({ row: idx, msg: where + ': 答えが空' });
+        if (seenFace[c.category + '|' + c.symbol]) errs.push({ row: idx, msg: where + ': 問題文の重複' });
+        seenFace[c.category + '|' + c.symbol] = true;
+        return;
+      }
       if (!c.name) errs.push({ row: idx, msg: where + ': name が空' });
       if (!c.symbol) errs.push({ row: idx, msg: where + ': symbol が空' });
       if (seen[c.id]) errs.push({ row: idx, msg: where + ': 重複行' });
@@ -468,16 +504,19 @@
   function buildItems(selectedCards, dirs) {
     function catRank(c) { return CAT_ORDER[c] === undefined ? 9 : CAT_ORDER[c]; }
     var items = [];
-    (dirs || DIRS).forEach(function (dir) {
+    var useDirs = dirsForCards(selectedCards, dirs);
+    (Array.isArray(dirs) ? dirs : DIRS).concat(DIRS).filter(function (d, i, a) { return a.indexOf(d) === i && useDirs.indexOf(d) >= 0; }).forEach(function (dir) {
       var byFace = Object.create(null);
       var order = [];
       selectedCards.forEach(function (c) {
-        var face = (dir === 'sn') ? c.symbol : c.name;
-        if (!byFace[face]) { byFace[face] = []; order.push(face); }
-        byFace[face].push(c);
+        if (effectiveDirs(c.category, dirs).indexOf(dir) < 0) return;
+        var gk = (catConf(c.category).plain ? 'P|' : '') + ((dir === 'sn') ? c.symbol : c.name);
+        if (!byFace[gk]) { byFace[gk] = []; order.push(gk); }
+        byFace[gk].push(c);
       });
-      order.forEach(function (face) {
-        var group = byFace[face];
+      order.forEach(function (gk) {
+        var group = byFace[gk], plain = catConf(group[0].category).plain;
+        var face = (dir === 'sn') ? group[0].symbol : group[0].name;
         // 答え候補をカテゴリ別にまとめる（重複名は1回）
         var cats = Object.create(null), catOrder = [];
         var notes = [], seenAns = Object.create(null);
@@ -491,12 +530,13 @@
         var answer = catOrder.map(function (cat) { return cats[cat].join('・'); })
           .filter(function (s) { return s.length > 0; }).join('／');
         items.push({
-          key: 'F|' + dir + '|' + face,
+          key: 'F|' + dir + '|' + gk,
           dir: dir,
           face: face,
           answer: answer,
-          faceIsFormula: dir === 'sn',
-          answerIsFormula: dir === 'ns',
+          faceIsFormula: !plain && dir === 'sn',
+          answerIsFormula: !plain && dir === 'ns',
+          plain: plain,
           note: notes.join(' '),
           cardIds: group.map(function (c) { return c.id; })
         });
@@ -621,8 +661,9 @@
     var out = Object.create(null);
     cards.forEach(function (c) {
       var lk = levelKey(c);
-      if (!out[lk]) { out[lk] = {}; DIRS.forEach(function (d) { out[lk][d] = { total: 0, grad: 0 }; }); }
-      DIRS.forEach(function (d) {
+      var ds = catConf(c.category).dirs;
+      if (!out[lk]) { out[lk] = {}; ds.forEach(function (d) { out[lk][d] = { total: 0, grad: 0 }; }); }
+      ds.forEach(function (d) {
         out[lk][d].total += 1;
         if (getState(store, c.id, d).grad) out[lk][d].grad += 1;
       });
@@ -630,11 +671,35 @@
     return out;
   }
 
-  /** カード集合×方向の { total, grad } */
+  /** カード集合×方向の { total, grad }（その方向を出さないカテゴリのカードは数えない） */
   function progressOf(cardsSubset, store, dir) {
     var total = 0, grad = 0;
-    cardsSubset.forEach(function (c) { total += 1; if (getState(store, c.id, dir).grad) grad += 1; });
+    cardsSubset.forEach(function (c) {
+      if (catConf(c.category).dirs.indexOf(dir) < 0) return;
+      total += 1; if (getState(store, c.id, dir).grad) grad += 1;
+    });
     return { total: total, grad: grad };
+  }
+  /**
+   * 進捗の列 [{ key, category, dir, total, grad }]。各カードを effectiveDirs の方向ぶん数える。
+   * dirs が配列なら列＝方向（category は null。cardsSubset が空でも dirs の列を 0/0 で返す）、
+   * カテゴリ別指定なら列＝カテゴリ×方向（出てきた順）。
+   */
+  function progressTracks(cardsSubset, store, dirs) {
+    var byCat = !Array.isArray(dirs), byKey = Object.create(null), out = [];
+    function track(cat, d) {
+      var key = (cat ? cat + '|' : '') + d;
+      if (!byKey[key]) { byKey[key] = { key: key, category: cat, dir: d, total: 0, grad: 0 }; out.push(byKey[key]); }
+      return byKey[key];
+    }
+    if (!byCat) dirs.forEach(function (d) { track(null, d); });
+    cardsSubset.forEach(function (c) {
+      effectiveDirs(c.category, dirs).forEach(function (d) {
+        var t = track(byCat ? c.category : null, d);
+        t.total += 1; if (getState(store, c.id, d).grad) t.grad += 1;
+      });
+    });
+    return out;
   }
   /** 選択範囲×方向の合計 { total, grad }（レベルとセットで同じカードが重なっても1枚として数える） */
   function summary(cards, store, selectedKeys, dir, sets) {
@@ -651,10 +716,9 @@
    * 戻り値: [{ card, grad(全方向で覚えた), any(何か記録あり), states: {sn:{...}, ns:{...}} }] — 覚えた → 覚えた×1 → 記録あり → 未 の順
    */
   function cardList(cards, store, lk, dirs, sets) {
-    var ds = dirs || DIRS;
     var out = cardsForKey(cards, lk, sets).map(function (c) {
       var states = {}, grad = true, any = false;
-      ds.forEach(function (d) {
+      effectiveDirs(c.category, dirs).forEach(function (d) {
         var k = itemKey(c.id, d);
         states[d] = store.items[k] || null;
         if (states[d]) any = true;
@@ -675,9 +739,8 @@
 
   /** レベル or セット × 方向のリセット（dir 省略で両方向） */
   function resetLevel(store, cards, lk, dir, sets) {
-    var dirs = dir ? [dir] : DIRS;
     cardsForKey(cards, lk, sets).forEach(function (c) {
-      dirs.forEach(function (d) { delete store.items[itemKey(c.id, d)]; });
+      (dir ? [dir] : catConf(c.category).dirs).forEach(function (d) { delete store.items[itemKey(c.id, d)]; });
     });
   }
 
@@ -699,6 +762,7 @@
 
   return {
     CONFIG: CONFIG, DIRS: DIRS, DIR_LABEL: DIR_LABEL, CATEGORIES: CATEGORIES, ELEMENTS: ELEMENTS,
+    catConf: catConf, effectiveDirs: effectiveDirs, dirsForCards: dirsForCards, progressTracks: progressTracks,
     normalizeSymbol: normalizeSymbol, normalizeName: normalizeName, normalizeCard: normalizeCard,
     tokenize: tokenize, isCharge: isCharge, renderTokens: renderTokens, escapeHtml: escapeHtml,
     cardId: cardId, levelKey: levelKey, itemKey: itemKey,
@@ -715,14 +779,18 @@
 (function () {
   'use strict';
   var E = window.KagakuEngine;
-  var DATA = [{"category":"イオン","level":1,"name":"水素イオン","symbol":"H^+","note":""},{"category":"イオン","level":1,"name":"ナトリウムイオン","symbol":"Na^+","note":""},{"category":"イオン","level":1,"name":"カリウムイオン","symbol":"K^+","note":""},{"category":"イオン","level":1,"name":"銀イオン","symbol":"Ag^+","note":""},{"category":"イオン","level":1,"name":"銅イオン","symbol":"Cu^2+","note":""},{"category":"イオン","level":1,"name":"亜鉛イオン","symbol":"Zn^2+","note":""},{"category":"イオン","level":1,"name":"マグネシウムイオン","symbol":"Mg^2+","note":""},{"category":"イオン","level":1,"name":"カルシウムイオン","symbol":"Ca^2+","note":""},{"category":"イオン","level":1,"name":"バリウムイオン","symbol":"Ba^2+","note":""},{"category":"イオン","level":1,"name":"鉄イオン","symbol":"Fe^2+","note":""},{"category":"イオン","level":1,"name":"アルミニウムイオン","symbol":"Al^3+","note":""},{"category":"イオン","level":1,"name":"塩化物イオン","symbol":"Cl^-","note":""},{"category":"イオン","level":1,"name":"硫化物イオン","symbol":"S^2-","note":""},{"category":"イオン","level":2,"name":"アンモニウムイオン","symbol":"NH4^+","note":""},{"category":"イオン","level":2,"name":"水酸化物イオン","symbol":"OH^-","note":""},{"category":"イオン","level":2,"name":"硝酸イオン","symbol":"NO3^-","note":""},{"category":"イオン","level":2,"name":"硫酸イオン","symbol":"SO4^2-","note":""},{"category":"イオン","level":2,"name":"炭酸イオン","symbol":"CO3^2-","note":""}];
+  var DATA = [{"category":"用語","level":1,"name":"指示薬","symbol":"色の変化によって、水溶液が酸性・中性・アルカリ性のどれかを調べる薬品のこと","note":""},{"category":"用語","level":1,"name":"リトマス紙","symbol":"青色のものが赤色に変われば酸性、赤色のものが青色に変わればアルカリ性とわかる紙の指示薬","note":""},{"category":"用語","level":1,"name":"BTB溶液","symbol":"酸性で黄色、中性で緑色、アルカリ性で青色になる指示薬","note":""},{"category":"用語","level":1,"name":"フェノールフタレイン溶液","symbol":"酸性・中性では無色で、アルカリ性のときだけ濃いピンク（赤色）になる指示薬","note":""},{"category":"用語","level":1,"name":"pH試験紙","symbol":"色の変化で、酸性・アルカリ性の強さの程度もおよそわかる紙の指示薬","note":""},{"category":"用語","level":1,"name":"pH","symbol":"水溶液の酸性・アルカリ性の強さを表す数値で、中性のとき7になるもの","note":""},{"category":"用語","level":1,"name":"酸性が強いほど小さく、アルカリ性が強いほど大きくなる","symbol":"pHの数値は、酸性が強いほど、アルカリ性が強いほど、それぞれどうなるか","note":""},{"category":"用語","level":1,"name":"水素","symbol":"酸性の水溶液にマグネシウムや亜鉛などの金属を入れたときに発生する気体","note":""},{"category":"用語","level":2,"name":"酸","symbol":"水に溶けると電離して水素イオンを生じる物質","note":""},{"category":"用語","level":2,"name":"水素イオン","symbol":"酸が電離して生じる、酸性の性質のもとになるイオン","note":""},{"category":"用語","level":2,"name":"アルカリ","symbol":"水に溶けると電離して水酸化物イオンを生じる物質","note":""},{"category":"用語","level":2,"name":"水酸化物イオン","symbol":"アルカリが電離して生じる、アルカリ性の性質のもとになるイオン","note":""},{"category":"用語","level":2,"name":"酸性","symbol":"水溶液中の水素イオンの数が、水酸化物イオンの数より多いときの液性","note":""},{"category":"用語","level":2,"name":"中性","symbol":"水溶液中の水素イオンの数と水酸化物イオンの数が等しいときの液性","note":""},{"category":"用語","level":2,"name":"アルカリ性","symbol":"水溶液中の水酸化物イオンの数が、水素イオンの数より多いときの液性","note":""},{"category":"用語","level":2,"name":"陰極（陰イオンが引き寄せられるのは陽極）","symbol":"電圧をかけたとき、水溶液中の陽イオンが引き寄せられる電極","note":""},{"category":"用語","level":3,"name":"中和","symbol":"酸とアルカリを混ぜたとき、H+とOH−が結びついて水ができ、たがいの性質を打ち消し合う反応","note":""},{"category":"用語","level":3,"name":"起こる（完全に中性にできなくても中和は起こっている）","symbol":"酸性の水溶液にアルカリ性の水溶液を1滴だけ加えたとき、中和は起きるか","note":""},{"category":"用語","level":3,"name":"水","symbol":"中和で、H+とOH−が結びついてできる物質","note":""},{"category":"用語","level":3,"name":"塩（えん）","symbol":"中和でできる、酸の陰イオンとアルカリの陽イオンが結びついてできる物質","note":""},{"category":"用語","level":3,"name":"硫酸バリウム","symbol":"うすい硫酸と水酸化バリウム水溶液の中和でできる、水に溶けにくく白い沈殿になる塩","note":""},{"category":"用語","level":3,"name":"イオンのまま液中に残る（硫酸Baのような水に溶けない塩ができるときは、イオンの数が減っていく）","symbol":"中和で水にならない酸の陰イオンとアルカリの陽イオンは、塩が水に溶ける場合どうなるか","note":""},{"category":"用語","level":3,"name":"液中のイオンが水と沈殿になり、ほとんどなくなるから","symbol":"水酸化バリウム水溶液にうすい硫酸を加えて、ちょうど中和したとき電流がほとんど流れなくなる理由","note":""},{"category":"用語","level":3,"name":"できた塩が水に溶けて、イオンのまま残るから","symbol":"水酸化ナトリウム水溶液にうすい硫酸を加えて、ちょうど中和しても電流が0にならない理由","note":""},{"category":"用語","level":4,"name":"電子","symbol":"金属の原子が陽イオンになるときに放出する、−の電気をもつ小さな粒子","note":""},{"category":"用語","level":4,"name":"陽イオンへのなりやすさは金属の種類によってちがう","symbol":"金属を別の金属のイオンを含む水溶液に入れると、変化する組み合わせとしない組み合わせがある。ここから分かること","note":""},{"category":"用語","level":4,"name":"なりやすい金属が電子を放出してイオンになり溶け、なりにくい金属のイオンが電子を受け取って金属になる","symbol":"イオンになりやすい金属を、それよりなりにくい金属のイオンを含む水溶液に入れたときの結果","note":""},{"category":"用語","level":4,"name":"変化しない","symbol":"イオンになりにくい金属を、それよりなりやすい金属のイオンを含む水溶液に入れたときの結果","note":""},{"category":"用語","level":4,"name":"銅イオンが電子を受け取って銅になり、減るから","symbol":"硫酸銅水溶液に銅よりイオンになりやすい金属を入れておくと、水溶液の青色がうすくなる理由","note":""},{"category":"用語","level":5,"name":"電池（正確には化学電池）","symbol":"化学変化を利用して、物質のもつ化学エネルギーを電気エネルギーとして取り出す装置のこと","note":""},{"category":"用語","level":5,"name":"化学エネルギー","symbol":"物質そのものがもっていて、化学変化によって熱や電気などとして取り出せるエネルギー","note":""},{"category":"用語","level":5,"name":"なりやすい金属","symbol":"電池で、負極になるのはイオンになりやすい金属、なりにくい金属のどちらか","note":""},{"category":"用語","level":5,"name":"なりにくい金属","symbol":"電池で、正極になるのはイオンになりやすい金属、なりにくい金属のどちらか","note":""},{"category":"用語","level":5,"name":"2つの金属のイオンへのなりやすさの差が大きい組み合わせ（イオンになりやすさはMg>Zn>Cuなので、CuとZnよりCuとMgの方が大きくなる。）","symbol":"2種類の金属板で電池をつくるとき、どのような金属の組み合わせだと生じる電圧が大きくなるか","note":""},{"category":"用語","level":5,"name":"できない（イオンへのなりやすさの差が0→電圧0）","symbol":"同じ種類の金属板2枚を電解質の水溶液に入れて導線でつないで電池にできるか","note":""},{"category":"用語","level":5,"name":"負極から正極（電流と逆向き）","symbol":"電池で電流を流すとき、電子は正極、負極のどちらからどちらに流れるか。","note":""},{"category":"用語","level":5,"name":"正極から負極（電子の移動と逆向き）","symbol":"電池で電流を流すとき、電流は正極、負極のどちらからどちらに流れるか。","note":""},{"category":"用語","level":5,"name":"アルミニウムが電子を放出してイオンになり、溶け出すから","symbol":"アルミニウムはく・炭素棒・食塩水の電池で、使ううちにアルミニウムはくがぼろぼろになる理由","note":""},{"category":"用語","level":5,"name":"ボルタ電池","symbol":"銅板と亜鉛板をうすい硫酸に入れてできる電池の名前","note":""},{"category":"用語","level":5,"name":"水素","symbol":"ボルタ電池の正極（銅板）で、水溶液中のH+が電子を受け取って発生する気体","note":""},{"category":"用語","level":5,"name":"ダニエル電池","symbol":"亜鉛板を硫酸亜鉛水溶液に、銅板を硫酸銅水溶液に入れ、2つの液を仕切りで分けた電池の名前","note":""},{"category":"用語","level":5,"name":"亜鉛が電子を放出して亜鉛イオンになり、溶け出す","symbol":"ダニエル電池の負極（亜鉛板）で起こること","note":""},{"category":"用語","level":5,"name":"銅イオンが電子を受け取って銅になり、付着する","symbol":"ダニエル電池の正極（銅板）で起こること","note":""},{"category":"用語","level":5,"name":"2つの液が混ざるのを防ぎながら、イオンを通す","symbol":"ダニエル電池で2つの水溶液を分ける仕切り（セロハン膜・素焼きの板・塩橋）のはたらき","note":""},{"category":"用語","level":5,"name":"濃くなっていく","symbol":"ダニエル電池を使っていくときの硫酸亜鉛水溶液の濃度の変化","note":""},{"category":"用語","level":5,"name":"薄くなっていく","symbol":"ダニエル電池を使っていくときの硫酸銅水溶液の濃度の変化","note":""},{"category":"用語","level":6,"name":"充電","symbol":"外部から逆向きの電流を流して、電気エネルギーをたくわえること","note":""},{"category":"用語","level":6,"name":"一次電池","symbol":"充電ができず、使いきりで使うタイプの電池のこと","note":""},{"category":"用語","level":6,"name":"二次電池","symbol":"充電して繰り返し使えるタイプの電池のこと","note":""},{"category":"用語","level":6,"name":"燃料電池","symbol":"水素と酸素が結びついて水ができるときに発生する電気エネルギーをとり出す装置","note":""},{"category":"イオン","level":1,"name":"水素イオン","symbol":"H^+","note":""},{"category":"イオン","level":1,"name":"ナトリウムイオン","symbol":"Na^+","note":""},{"category":"イオン","level":1,"name":"カリウムイオン","symbol":"K^+","note":""},{"category":"イオン","level":1,"name":"銀イオン","symbol":"Ag^+","note":""},{"category":"イオン","level":1,"name":"銅イオン","symbol":"Cu^2+","note":""},{"category":"イオン","level":1,"name":"亜鉛イオン","symbol":"Zn^2+","note":""},{"category":"イオン","level":1,"name":"マグネシウムイオン","symbol":"Mg^2+","note":""},{"category":"イオン","level":1,"name":"カルシウムイオン","symbol":"Ca^2+","note":""},{"category":"イオン","level":1,"name":"バリウムイオン","symbol":"Ba^2+","note":""},{"category":"イオン","level":1,"name":"鉄イオン","symbol":"Fe^2+","note":""},{"category":"イオン","level":1,"name":"アルミニウムイオン","symbol":"Al^3+","note":""},{"category":"イオン","level":1,"name":"塩化物イオン","symbol":"Cl^-","note":""},{"category":"イオン","level":1,"name":"硫化物イオン","symbol":"S^2-","note":""},{"category":"イオン","level":2,"name":"アンモニウムイオン","symbol":"NH4^+","note":""},{"category":"イオン","level":2,"name":"水酸化物イオン","symbol":"OH^-","note":""},{"category":"イオン","level":2,"name":"硝酸イオン","symbol":"NO3^-","note":""},{"category":"イオン","level":2,"name":"硫酸イオン","symbol":"SO4^2-","note":""},{"category":"イオン","level":2,"name":"炭酸イオン","symbol":"CO3^2-","note":""}];
   var CARDS = DATA.map(E.normalizeCard);
   var LEVELS = E.levelList(CARDS);
   var SETS = E.buildSets(CARDS, []);   // 試験範囲などの名前つきカード集合（data/sets.csv）
-  var PAGE = {"storageKey":"kagaku-ion-v1","defaultDir":"ns","dirLabels":{"sn":"式 → 名称","ns":"名称 → 式"},"levelLabels":{"イオン:1":"単原子イオン","イオン:2":"多原子イオン"}};   // ページ別設定（build.js の PAGES）
+  var PAGE = {"storageKey":"kagaku-chu2-v1","defaultDir":"ns","dirLabels":null,"levelLabels":{"イオン:1":"単原子イオン","イオン:2":"多原子イオン","用語:1":"§1 水溶液の液性","用語:2":"§2 酸・アルカリとイオン","用語:3":"§3 中和とイオン","用語:4":"§4-1 金属のイオンへのなりやすさ","用語:5":"§4-2 電池とそのしくみ","用語:6":"§4-3 身の回りの電池"},"dirGroups":[{"category":"用語","heading":"用語の向き","labels":{"sn":"説明 → 用語","ns":"用語 → 説明"},"def":"sn"},{"category":"イオン","heading":"イオン式の向き","labels":{"sn":"式 → 名称","ns":"名称 → 式"},"def":"ns"}],"catLabels":{"イオン":"イオン式"},"howto":["<b>答えの面</b>をタップ → 答えが出る。<b>もう一度タップ、または左にスワイプ → 次のカード</b>","<b>右にスワイプ</b> → 前のカードに戻る（押し直しできる）","<b>頻度調整</b>（はじめはON）：「<b>覚えた</b>」を押したカードは出にくくなり、<b>2回続けて押す</b>と出なくなる。押さずに次へ進むと元に戻る。試験前に全部見たいときはOFFに","<b>問題の面</b>をタップすると答えが少しずつ開く（ヒント）"]};   // ページ別設定（build.js の PAGES）
   var KEY = PAGE.storageKey;
   var DIR_LABEL = PAGE.dirLabels || E.DIR_LABEL;
   var LEVEL_LABEL = PAGE.levelLabels || {};
+  var CAT_LABEL = PAGE.catLabels || {};
+  // 向きの切替。dirGroups なし = 全カテゴリ共通1つ（settings.dir）／あり = カテゴリごと（settings.dirBy[category]）
+  var GROUPS = PAGE.dirGroups || [{ category: null, heading: '方向', labels: DIR_LABEL, def: PAGE.defaultDir }];
+  var DIR_VALUES = ['sn', 'ns', 'mix'];
   var $ = function (id) { return document.getElementById(id); };
 
   /* ===================== 保存 ===================== */
@@ -730,8 +798,9 @@
     try {
       var s = JSON.parse(localStorage.getItem(KEY) || 'null');
       if (s && s.version === 1 && s.settings && s.items) {
-        if (['sn', 'ns', 'mix'].indexOf(s.settings.dir) < 0) s.settings.dir = PAGE.defaultDir;
+        if (DIR_VALUES.indexOf(s.settings.dir) < 0) s.settings.dir = PAGE.defaultDir;
         if (!Array.isArray(s.settings.levels)) s.settings.levels = [];
+        if (s.settings.dirBy && typeof s.settings.dirBy !== 'object') delete s.settings.dirBy;
         return s;
       }
     } catch (e) { /* 壊れていたら初期化 */ }
@@ -744,25 +813,42 @@
     var d = new Date(), p = function (n) { return (n < 10 ? '0' : '') + n; };
     return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
   }
-  function dirs() { return store.settings.dir === 'mix' ? ['sn', 'ns'] : [store.settings.dir]; }
+  function groupDir(g) {
+    var v = g.category ? (store.settings.dirBy || {})[g.category] : store.settings.dir;
+    return DIR_VALUES.indexOf(v) >= 0 ? v : g.def;
+  }
+  function expandDir(d) { return d === 'mix' ? ['sn', 'ns'] : [d]; }
+  /** engine に渡す方向。共通なら配列、カテゴリ別なら { category: [...] } */
+  function dirs() {
+    if (!PAGE.dirGroups) return expandDir(store.settings.dir);
+    var m = {}; GROUPS.forEach(function (g) { m[g.category] = expandDir(groupDir(g)); }); return m;
+  }
+  function trackLabel(t) {
+    var g = t.category ? GROUPS.filter(function (x) { return x.category === t.category; })[0] : null;
+    return (g ? g.labels : DIR_LABEL)[t.dir];
+  }
+  function tracksOf(cardsSubset) { return E.progressTracks(cardsSubset, store, dirs()); }
 
   /* ===================== トップ描画 ===================== */
   function renderTop() {
-    var d = store.settings.dir, f = !!store.settings.freq;
-    Array.prototype.forEach.call($('seg-dir').children, function (b) {
-      var bd = b.getAttribute('data-dir');
-      if (DIR_LABEL[bd]) b.textContent = DIR_LABEL[bd];
-      b.classList.toggle('on', bd === d);
-    });
+    var f = !!store.settings.freq;
+    $('dirs').innerHTML = GROUPS.map(function (g, gi) {
+      var d = groupDir(g);
+      return (gi ? '<div style="height:12px"></div>' : '') + '<div class="row"><h2 style="margin:0">' + E.escapeHtml(g.heading) + '</h2></div>' +
+        '<div class="seg" data-g="' + gi + '">' + DIR_VALUES.map(function (x) {
+          return '<button data-dir="' + x + '"' + (x === d ? ' class="on"' : '') + '>' + E.escapeHtml(x === 'mix' ? 'ミックス' : g.labels[x]) + '</button>';
+        }).join('') + '</div>';
+    }).join('');
     $('sw-freq').classList.toggle('on', f); $('sw-freq').setAttribute('aria-checked', String(f));
     $('freq-desc').textContent = f ? 'ON：「覚えた」を押したカードは出にくくなり、2回続けると出なくなる' : 'OFF：全部のカードが均等に出る（記録しない）';
 
     // 全体概要
     var sumHtml = '';
-    dirs().forEach(function (dd) {
-      var s = E.summary(CARDS, store, store.settings.levels, dd, SETS);
+    var sumTracks = tracksOf(E.selectCards(CARDS, store.settings.levels, SETS));
+    if (!sumTracks.length) sumTracks = [{ total: 0, grad: 0 }];
+    sumTracks.forEach(function (s) {
       var pct = s.total ? Math.round(100 * s.grad / s.total) : 0;
-      sumHtml += '<div class="sumline"><span>' + (dirs().length > 1 ? DIR_LABEL[dd] + '　' : '') + '覚えた</span><span>' + s.grad + ' / ' + s.total + '</span></div>' +
+      sumHtml += '<div class="sumline"><span>' + (sumTracks.length > 1 ? E.escapeHtml(trackLabel(s)) + '　' : '') + '覚えた</span><span>' + s.grad + ' / ' + s.total + '</span></div>' +
         '<div class="bar"><i style="width:' + pct + '%"></i></div>';
     });
     $('sum').innerHTML = sumHtml;
@@ -771,8 +857,8 @@
     function rangeRow(key, label, cardsOfKey) {
       var checked = store.settings.levels.indexOf(key) >= 0;
       var bars = '', nums = [];
-      dirs().forEach(function (dd) {
-        var q = E.progressOf(cardsOfKey, store, dd); var pct = q.total ? Math.round(100 * q.grad / q.total) : 0;
+      tracksOf(cardsOfKey).forEach(function (q) {
+        var pct = q.total ? Math.round(100 * q.grad / q.total) : 0;
         bars += '<div class="bar thin"><i style="width:' + pct + '%"></i></div>'; nums.push(q.grad);
       });
       return '<label class="lvl"><input type="checkbox" data-lk="' + E.escapeHtml(key) + '"' + (checked ? ' checked' : '') + '>' +
@@ -790,7 +876,7 @@
     }
     var lastCat = null;
     LEVELS.forEach(function (l) {
-      if (l.category !== lastCat) { html += (lastCat ? '<div style="height:10px"></div>' : '') + '<h2 style="margin-top:4px">' + E.escapeHtml(l.category) + '</h2>'; lastCat = l.category; }
+      if (l.category !== lastCat) { html += (lastCat ? '<div style="height:10px"></div>' : '') + '<h2 style="margin-top:4px">' + E.escapeHtml(CAT_LABEL[l.category] || l.category) + '</h2>'; lastCat = l.category; }
       html += rangeRow(l.key, LEVEL_LABEL[l.key] ? E.escapeHtml(LEVEL_LABEL[l.key]) : 'Lv' + l.level, E.cardsForKey(CARDS, l.key, SETS));
     });
     $('levels').innerHTML = html;
@@ -840,15 +926,16 @@
     return '記録あり';
   }
   function renderDetail() {
-    var ds = dirs();
-    $('detail-title').textContent = keyLabel(detailKey) + '（' + ds.map(function (d) { return DIR_LABEL[d]; }).join(' / ') + '）';
-    var list = E.cardList(CARDS, store, detailKey, ds, SETS);
+    $('detail-title').textContent = keyLabel(detailKey) + '（' + tracksOf(E.cardsForKey(CARDS, detailKey, SETS)).map(trackLabel).join(' / ') + '）';
+    var list = E.cardList(CARDS, store, detailKey, dirs(), SETS);
     var html = '';
     list.forEach(function (row) {
-      var stt = ds.map(function (d) { return stateLabel(row.states[d]); }).join(' / ');
+      var stt = Object.keys(row.states).map(function (d) { return stateLabel(row.states[d]); }).join(' / ');
+      var plain = E.catConf(row.card.category).plain;
       html += '<div class="drow' + (row.any ? ' has' : '') + '">' +
+        (plain ? '<span class="nm"><b>' + E.escapeHtml(row.card.name) + '</b><span class="desc">' + E.escapeHtml(row.card.symbol) + '</span></span>' :
         '<span class="sym">' + E.renderTokens(E.tokenize(row.card.symbol), 99, true) + '</span>' +
-        '<span class="nm">' + E.escapeHtml(row.card.name) + '</span>' +
+        '<span class="nm">' + E.escapeHtml(row.card.name) + '</span>') +
         '<span class="stt' + (row.grad ? ' g' : '') + '">' + E.escapeHtml(stt) + '</span>' +
         '<button type="button" class="rst" data-card="' + E.escapeHtml(row.card.id) + '">戻す</button></div>';
     });
@@ -856,7 +943,8 @@
   }
   $('detail-list').addEventListener('click', function (e) {
     var b = e.target.closest('button[data-card]'); if (!b) return;
-    dirs().forEach(function (d) { E.resetCard(store, b.getAttribute('data-card'), d); });
+    var id = b.getAttribute('data-card');
+    E.dirsForCards(CARDS.filter(function (c) { return c.id === id; }), dirs()).forEach(function (d) { E.resetCard(store, id, d); });
     save(); renderDetail();
   });
   $('btn-detail-top').addEventListener('click', toTop);
@@ -893,8 +981,8 @@
     var h = current(); if (!h) return;
     var it = h.item;
     var qt = E.tokenize(it.face), at = E.tokenize(it.answer);
-    $('q').className = 'face ' + (it.faceIsFormula ? 'formula' : 'jp');
-    $('a').className = 'face ' + (it.answerIsFormula ? 'formula' : 'jp');
+    $('q').className = faceClass(it.faceIsFormula, it.plain, it.face);
+    $('a').className = faceClass(it.answerIsFormula, it.plain, it.answer);
     $('q-txt').innerHTML = E.renderTokens(qt, qt.length, it.faceIsFormula);
     var full = h.revealed >= at.length;
     $('a-txt').innerHTML = E.renderTokens(at, h.revealed, it.answerIsFormula) +
@@ -902,6 +990,12 @@
     $('btn-latest').classList.toggle('hidden', S.pos >= S.hist.length - 1);
     $('pos').textContent = (S.pos < S.hist.length - 1) ? ((S.hist.length - 1 - S.pos) + ' 枚前') : '';
     Array.prototype.forEach.call($('marks').children, function (b) { b.classList.toggle('sel', h.mark === b.getAttribute('data-m')); });
+  }
+
+  function faceClass(formula, plain, text) {
+    if (formula) return 'face formula';
+    var n = plain ? text.length : 0;
+    return 'face jp' + (n > 24 ? ' xlong' : n > 10 ? ' long' : '');
   }
 
   function hint() {
@@ -957,9 +1051,12 @@
   });
 
   /* ===================== トップの操作 ===================== */
-  $('seg-dir').addEventListener('click', function (e) {
-    var b = e.target.closest('button'); if (!b) return;
-    store.settings.dir = b.getAttribute('data-dir'); save(); renderTop();
+  $('dirs').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-dir]'); if (!b) return;
+    var g = GROUPS[+b.parentNode.getAttribute('data-g')], d = b.getAttribute('data-dir');
+    if (g.category) { store.settings.dirBy = store.settings.dirBy || {}; store.settings.dirBy[g.category] = d; }
+    else store.settings.dir = d;
+    save(); renderTop();
   });
   $('sw-freq').addEventListener('click', function () { store.settings.freq = !store.settings.freq; save(); renderTop(); });
   $('levels').addEventListener('change', function (e) {
@@ -975,9 +1072,10 @@
     var b = e.target.closest('button[data-rst]'); if (!b) return;
     e.preventDefault();
     var lk = b.getAttribute('data-rst');
-    var label = keyLabel(lk) + (dirs().length > 1 ? '' : '（' + DIR_LABEL[dirs()[0]] + '）');
+    var tr = tracksOf(E.cardsForKey(CARDS, lk, SETS));
+    var label = keyLabel(lk) + (tr.length > 1 ? '' : '（' + trackLabel(tr[0]) + '）');
     if (!confirm(label + ' の学習記録をリセットします。いいですか？')) return;
-    dirs().forEach(function (d) { E.resetLevel(store, CARDS, lk, d, SETS); });
+    tr.forEach(function (t) { E.resetLevel(store, CARDS, lk, t.dir, SETS); });
     save(); renderTop();
   });
   $('btn-start').addEventListener('click', startSession);
@@ -992,6 +1090,7 @@
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').catch(function () { /* 圏外や非対応は黙って諦める */ });
   }
+  if (PAGE.howto) $('howto').innerHTML = PAGE.howto.map(function (h) { return '<li>' + h + '</li>'; }).join('');
   renderTop();
   if (store.settings.levels.length) startSession();   // 中断再開前提：前回の続きから
 })();

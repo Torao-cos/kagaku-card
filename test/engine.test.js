@@ -314,7 +314,7 @@ t('summary / resetLevel / cardList がセットキーで動く', () => {
   assert.deepStrictEqual(E.summary(cards, st, [SETS[0].key], 'sn', SETS), { total: 55, grad: 0 });
 });
 
-/* ---------- イオン式（/ion/ ページ） ---------- */
+/* ---------- イオン式（data/ions.csv・/chu2/ ページで使う） ---------- */
 const ION_TOK = {
   'Ca^2+': ['Ca', '^2+'],
   'SO4^2-': ['S', 'O', '4', '^2-'],
@@ -353,16 +353,91 @@ t('validate はイオンの誤りを弾く', () => {
   assert.ok(notIon.some((e) => /イオン だけ/.test(e.msg)));
 });
 t('PAGES: 両ページのCSVが読めて検証PASS・保存キーとキャッシュprefixが別', () => {
-  const { PAGES } = require('../build.js');
-  assert.deepStrictEqual(PAGES.map((p) => p.id), ['main', 'ion']);
+  const { PAGES, loadPageCards } = require('../build.js');
+  assert.deepStrictEqual(PAGES.map((p) => p.id), ['main', 'chu2']);
   PAGES.forEach((p) => {
-    const cs = loadCards(p.csv);
+    const cs = loadPageCards(p).cards;
     assert.deepStrictEqual(E.validateCards(cs).concat(E.validateSets(cs, loadSetRows(p.sets))).map((e) => e.msg), [], p.id);
   });
   assert.strictEqual(PAGES[0].storageKey, 'kagaku-card-v1');
-  assert.strictEqual(PAGES[1].storageKey, 'kagaku-ion-v1');
-  assert.strictEqual(PAGES[1].defaultDir, 'ns');
+  assert.strictEqual(PAGES[1].storageKey, 'kagaku-chu2-v1');
+  assert.strictEqual(PAGES[1].cachePrefix, 'kagaku-chu2-');
+  assert.strictEqual(PAGES[1].out, path.join(__dirname, '..', 'docs', 'chu2'));
+  assert.deepStrictEqual(PAGES[0].swSkip, ['chu2/']);
   assert.ok(PAGES[0].cachePrefix.indexOf(PAGES[1].cachePrefix) !== 0 && PAGES[1].cachePrefix.indexOf(PAGES[0].cachePrefix) !== 0);
+});
+
+/* ---------- 中2テスト対策（/chu2/ ページ: 用語＋イオン式） ---------- */
+const { loadTerms, loadPageCards, PAGES } = require('../build.js');
+const CHU2 = PAGES.find((p) => p.id === 'chu2');
+const termLabels = {};
+const terms = loadTerms(CHU2.terms, termLabels);
+const SECTIONS = ['§1 水溶液の液性', '§2 酸・アルカリとイオン', '§3 中和とイオン', '§4-1 金属のイオンへのなりやすさ', '§4-2 電池とそのしくみ', '§4-3 身の回りの電池'];
+t('用語CSV: 50枚・検証PASS・section がファイル順に Lv1..6', () => {
+  assert.strictEqual(terms.length, 50);
+  assert.deepStrictEqual(E.validateCards(terms).map((e) => e.msg), []);
+  assert.deepStrictEqual(E.levelList(terms).map((l) => termLabels[l.key]), SECTIONS);
+  assert.deepStrictEqual(E.levelList(terms).map((l) => l.count), [8, 8, 8, 5, 17, 4]);
+  assert.ok(terms.every((c) => c.category === '用語' && c.note === ''), 'note は読まない');
+});
+t('用語: 文字列は正規化しない（全角括弧・−・空白そのまま）', () => {
+  const c = terms.find((x) => x.name === '塩（えん）');
+  assert.ok(c, '全角括弧が残る');
+  assert.ok(terms.some((x) => x.symbol.indexOf('H+とOH−') >= 0));
+  assert.strictEqual(E.normalizeCard(c).symbol, c.symbol, 'ブラウザ側の再正規化で変わらない');
+});
+t('用語の検証: 空・問題文重複を弾き、元素チェックはしない', () => {
+  const mk = (desc, term) => E.normalizeCard({ category: '用語', level: 1, name: term, symbol: desc });
+  assert.deepStrictEqual(E.validateCards([mk('Xxを含む説明', 'Zz')]).map((e) => e.msg), []);
+  assert.ok(E.validateCards([mk('', 'a')]).some((e) => /問題文が空/.test(e.msg)));
+  assert.ok(E.validateCards([mk('a', '')]).some((e) => /答えが空/.test(e.msg)));
+  assert.ok(E.validateCards([mk('同じ', 'a'), mk('同じ', 'b')]).some((e) => /問題文の重複/.test(e.msg)));
+});
+t('用語 sn = 説明→用語・ns = 用語→説明・note は出ない・下付きにしない', () => {
+  const sel = E.selectCards(terms, ['用語:1']);
+  const sn = E.buildItems(sel, ['sn']);
+  assert.strictEqual(sn.length, 8);
+  const lit = sn.find((it) => it.answer === 'リトマス紙');
+  assert.ok(lit.face.indexOf('青色のものが赤色に') === 0);
+  assert.strictEqual(lit.note, '');
+  assert.ok(sn.every((it) => it.plain && !it.faceIsFormula && !it.answerIsFormula));
+  const ns = E.buildItems(sel, ['ns']);
+  assert.strictEqual(ns.find((it) => it.face === 'リトマス紙').answer, lit.face);
+});
+t('カテゴリ別の向き: 用語とイオンが別々に効く', () => {
+  const all = loadPageCards(CHU2).cards;
+  const sel = E.selectCards(all, ['用語:1', 'イオン:1']);
+  const items = E.buildItems(sel, { '用語': ['sn'], 'イオン': ['ns'] });
+  const t1 = items.filter((it) => it.plain), io = items.filter((it) => !it.plain);
+  assert.strictEqual(t1.length, 8); assert.ok(t1.every((it) => it.dir === 'sn'));
+  assert.strictEqual(io.length, 13); assert.ok(io.every((it) => it.dir === 'ns' && it.answerIsFormula));
+  const mix = E.buildItems(sel, { '用語': ['sn', 'ns'], 'イオン': ['sn'] });
+  assert.strictEqual(mix.filter((it) => it.plain).length, 16);
+  assert.ok(mix.filter((it) => !it.plain).every((it) => it.dir === 'sn' && it.faceIsFormula));
+  assert.deepStrictEqual(E.effectiveDirs('用語', { 'イオン': ['ns'] }), ['sn', 'ns']);
+});
+t('用語の進捗: レベル総数 = その section の枚数（方向ごと）・列はカテゴリ×方向', () => {
+  const all = loadPageCards(CHU2).cards;
+  const st = E.emptyStore();
+  const it = E.buildItems(E.selectCards(all, ['用語:5']), { '用語': ['sn'] })[0];
+  E.applyMark(st, it, 'o', 'd1'); E.applyMark(st, it, 'o', 'd1');
+  assert.deepStrictEqual(E.progress(all, st)['用語:5'], { sn: { total: 17, grad: 1 }, ns: { total: 17, grad: 0 } });
+  const dirs = { '用語': ['sn'], 'イオン': ['ns', 'sn'] };
+  const tr = E.progressTracks(E.selectCards(all, ['用語:5', 'イオン:2']), st, dirs);
+  assert.deepStrictEqual(tr.map((x) => [x.key, x.total, x.grad]), [['用語|sn', 17, 1], ['イオン|ns', 5, 0], ['イオン|sn', 5, 0]]);
+  assert.deepStrictEqual(E.progressTracks([], st, dirs), []);
+  const list = E.cardList(all, st, '用語:5', dirs);
+  assert.strictEqual(list.length, 17); assert.ok(list[0].grad); assert.deepStrictEqual(Object.keys(list[0].states), ['sn']);
+  E.resetLevel(st, all, '用語:5');
+  assert.deepStrictEqual(E.progress(all, st)['用語:5'].sn, { total: 17, grad: 0 });
+});
+t('progressTracks（共通の向き）は従来の summary と同じ', () => {
+  const st = E.emptyStore();
+  const it = E.buildItems(E.selectCards(cards, ['元素記号:2']), ['sn'])[0];
+  E.applyMark(st, it, 'o', 'd1'); E.applyMark(st, it, 'o', 'd1');
+  const sel = E.selectCards(cards, ['元素記号:2', '元素記号:3']);
+  assert.deepStrictEqual(E.progressTracks(sel, st, ['sn', 'ns']).map((x) => [x.key, x.total, x.grad]), [['sn', 12, 1], ['ns', 12, 0]]);
+  assert.deepStrictEqual(E.progressTracks([], st, ['ns']).map((x) => [x.key, x.total]), [['ns', 0]]);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

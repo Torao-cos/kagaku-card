@@ -102,6 +102,10 @@
   .face .txt{line-height:1.25}
   .face.formula .txt{font-size:clamp(40px,13vw,80px);font-weight:700;letter-spacing:.01em;font-family:"Helvetica Neue",Arial,"Noto Sans JP",sans-serif}
   .face.jp .txt{font-size:clamp(28px,8.5vw,52px);font-weight:700}
+  /* 用語など長い日本語（plain カードだけ。文字数で段階的に小さく） */
+  .face.jp.long,.face.jp.xlong{word-break:normal}
+  .face.jp.long .txt{font-size:clamp(22px,6.6vw,34px)}
+  .face.jp.xlong .txt{font-size:clamp(18px,5.4vw,26px);font-weight:600;line-height:1.55;text-align:left}
   .face .blank{color:var(--blank);margin:0 1px}
   .face .note{display:block;margin-top:10px;font-size:14px;font-weight:400;color:var(--muted)}
   /* 「覚えた」ボタン1つ。幅いっぱいにせず右寄せ＝「次へ」の形に見せない（進む操作はタップ/スワイプ） */
@@ -114,6 +118,8 @@
     .marks button{height:48px;font-size:17px}
     .face.formula .txt{font-size:clamp(36px,9vh,72px)}
     .face.jp .txt{font-size:clamp(24px,6.5vh,44px)}
+    .face.jp.long .txt{font-size:clamp(20px,5.6vh,30px)}
+    .face.jp.xlong .txt{font-size:clamp(16px,4.8vh,22px)}
   }
   /* ===== カード一覧（別画面） ===== */
   #detail{max-width:560px;margin:0 auto;padding:6px max(14px,env(safe-area-inset-left)) 40px}
@@ -124,6 +130,7 @@
   .drow .nm{flex:1;min-width:0;font-size:15px;overflow-wrap:anywhere}
   .drow .stt{flex:none;font-size:12px;color:var(--muted);min-width:4.5em;text-align:right}
   .drow .stt.g{color:var(--ok);font-weight:700}
+  .drow .desc{display:block;font-size:13px;color:var(--muted);line-height:1.45}
   .drow .rst{flex:none;border:1px solid var(--line);background:var(--card);color:var(--muted);border-radius:8px;font-size:12px;padding:5px 8px;visibility:hidden}
   .drow.has .rst{visibility:visible}
   .lvl .lst{flex:none;border:1px solid var(--line);background:var(--card);color:var(--accent);border-radius:8px;font-size:12px;padding:5px 7px}
@@ -141,7 +148,7 @@
 
   <div class="card">
     <h2>使い方</h2>
-    <ul class="howto">
+    <ul class="howto" id="howto">
       <li><b>問題の面</b>をタップ → 答えが1つずつ開く（ヒント）</li>
       <li><b>答えの面</b>をタップ → 答えが全部出る。<b>もう一度タップ、または左にスワイプ → 次のカード</b></li>
       <li><b>右にスワイプ</b> → 前のカードに戻る（押し直しできる）</li>
@@ -155,12 +162,7 @@
   </div>
 
   <div class="card">
-    <div class="row"><h2 style="margin:0">方向</h2></div>
-    <div class="seg" id="seg-dir">
-      <button data-dir="sn"></button>
-      <button data-dir="ns"></button>
-      <button data-dir="mix">ミックス</button>
-    </div>
+    <div id="dirs"></div>
     <div class="row" style="margin-top:14px">
       <div><h2 style="margin:0">頻度調整</h2><div class="muted" id="freq-desc"></div></div>
       <button class="switch" id="sw-freq" role="switch" aria-checked="false" aria-label="頻度調整"></button>
@@ -225,6 +227,10 @@
   var KEY = PAGE.storageKey;
   var DIR_LABEL = PAGE.dirLabels || E.DIR_LABEL;
   var LEVEL_LABEL = PAGE.levelLabels || {};
+  var CAT_LABEL = PAGE.catLabels || {};
+  // 向きの切替。dirGroups なし = 全カテゴリ共通1つ（settings.dir）／あり = カテゴリごと（settings.dirBy[category]）
+  var GROUPS = PAGE.dirGroups || [{ category: null, heading: '方向', labels: DIR_LABEL, def: PAGE.defaultDir }];
+  var DIR_VALUES = ['sn', 'ns', 'mix'];
   var $ = function (id) { return document.getElementById(id); };
 
   /* ===================== 保存 ===================== */
@@ -232,8 +238,9 @@
     try {
       var s = JSON.parse(localStorage.getItem(KEY) || 'null');
       if (s && s.version === 1 && s.settings && s.items) {
-        if (['sn', 'ns', 'mix'].indexOf(s.settings.dir) < 0) s.settings.dir = PAGE.defaultDir;
+        if (DIR_VALUES.indexOf(s.settings.dir) < 0) s.settings.dir = PAGE.defaultDir;
         if (!Array.isArray(s.settings.levels)) s.settings.levels = [];
+        if (s.settings.dirBy && typeof s.settings.dirBy !== 'object') delete s.settings.dirBy;
         return s;
       }
     } catch (e) { /* 壊れていたら初期化 */ }
@@ -246,25 +253,42 @@
     var d = new Date(), p = function (n) { return (n < 10 ? '0' : '') + n; };
     return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
   }
-  function dirs() { return store.settings.dir === 'mix' ? ['sn', 'ns'] : [store.settings.dir]; }
+  function groupDir(g) {
+    var v = g.category ? (store.settings.dirBy || {})[g.category] : store.settings.dir;
+    return DIR_VALUES.indexOf(v) >= 0 ? v : g.def;
+  }
+  function expandDir(d) { return d === 'mix' ? ['sn', 'ns'] : [d]; }
+  /** engine に渡す方向。共通なら配列、カテゴリ別なら { category: [...] } */
+  function dirs() {
+    if (!PAGE.dirGroups) return expandDir(store.settings.dir);
+    var m = {}; GROUPS.forEach(function (g) { m[g.category] = expandDir(groupDir(g)); }); return m;
+  }
+  function trackLabel(t) {
+    var g = t.category ? GROUPS.filter(function (x) { return x.category === t.category; })[0] : null;
+    return (g ? g.labels : DIR_LABEL)[t.dir];
+  }
+  function tracksOf(cardsSubset) { return E.progressTracks(cardsSubset, store, dirs()); }
 
   /* ===================== トップ描画 ===================== */
   function renderTop() {
-    var d = store.settings.dir, f = !!store.settings.freq;
-    Array.prototype.forEach.call($('seg-dir').children, function (b) {
-      var bd = b.getAttribute('data-dir');
-      if (DIR_LABEL[bd]) b.textContent = DIR_LABEL[bd];
-      b.classList.toggle('on', bd === d);
-    });
+    var f = !!store.settings.freq;
+    $('dirs').innerHTML = GROUPS.map(function (g, gi) {
+      var d = groupDir(g);
+      return (gi ? '<div style="height:12px"></div>' : '') + '<div class="row"><h2 style="margin:0">' + E.escapeHtml(g.heading) + '</h2></div>' +
+        '<div class="seg" data-g="' + gi + '">' + DIR_VALUES.map(function (x) {
+          return '<button data-dir="' + x + '"' + (x === d ? ' class="on"' : '') + '>' + E.escapeHtml(x === 'mix' ? 'ミックス' : g.labels[x]) + '</button>';
+        }).join('') + '</div>';
+    }).join('');
     $('sw-freq').classList.toggle('on', f); $('sw-freq').setAttribute('aria-checked', String(f));
     $('freq-desc').textContent = f ? 'ON：「覚えた」を押したカードは出にくくなり、2回続けると出なくなる' : 'OFF：全部のカードが均等に出る（記録しない）';
 
     // 全体概要
     var sumHtml = '';
-    dirs().forEach(function (dd) {
-      var s = E.summary(CARDS, store, store.settings.levels, dd, SETS);
+    var sumTracks = tracksOf(E.selectCards(CARDS, store.settings.levels, SETS));
+    if (!sumTracks.length) sumTracks = [{ total: 0, grad: 0 }];
+    sumTracks.forEach(function (s) {
       var pct = s.total ? Math.round(100 * s.grad / s.total) : 0;
-      sumHtml += '<div class="sumline"><span>' + (dirs().length > 1 ? DIR_LABEL[dd] + '　' : '') + '覚えた</span><span>' + s.grad + ' / ' + s.total + '</span></div>' +
+      sumHtml += '<div class="sumline"><span>' + (sumTracks.length > 1 ? E.escapeHtml(trackLabel(s)) + '　' : '') + '覚えた</span><span>' + s.grad + ' / ' + s.total + '</span></div>' +
         '<div class="bar"><i style="width:' + pct + '%"></i></div>';
     });
     $('sum').innerHTML = sumHtml;
@@ -273,8 +297,8 @@
     function rangeRow(key, label, cardsOfKey) {
       var checked = store.settings.levels.indexOf(key) >= 0;
       var bars = '', nums = [];
-      dirs().forEach(function (dd) {
-        var q = E.progressOf(cardsOfKey, store, dd); var pct = q.total ? Math.round(100 * q.grad / q.total) : 0;
+      tracksOf(cardsOfKey).forEach(function (q) {
+        var pct = q.total ? Math.round(100 * q.grad / q.total) : 0;
         bars += '<div class="bar thin"><i style="width:' + pct + '%"></i></div>'; nums.push(q.grad);
       });
       return '<label class="lvl"><input type="checkbox" data-lk="' + E.escapeHtml(key) + '"' + (checked ? ' checked' : '') + '>' +
@@ -292,7 +316,7 @@
     }
     var lastCat = null;
     LEVELS.forEach(function (l) {
-      if (l.category !== lastCat) { html += (lastCat ? '<div style="height:10px"></div>' : '') + '<h2 style="margin-top:4px">' + E.escapeHtml(l.category) + '</h2>'; lastCat = l.category; }
+      if (l.category !== lastCat) { html += (lastCat ? '<div style="height:10px"></div>' : '') + '<h2 style="margin-top:4px">' + E.escapeHtml(CAT_LABEL[l.category] || l.category) + '</h2>'; lastCat = l.category; }
       html += rangeRow(l.key, LEVEL_LABEL[l.key] ? E.escapeHtml(LEVEL_LABEL[l.key]) : 'Lv' + l.level, E.cardsForKey(CARDS, l.key, SETS));
     });
     $('levels').innerHTML = html;
@@ -342,15 +366,16 @@
     return '記録あり';
   }
   function renderDetail() {
-    var ds = dirs();
-    $('detail-title').textContent = keyLabel(detailKey) + '（' + ds.map(function (d) { return DIR_LABEL[d]; }).join(' / ') + '）';
-    var list = E.cardList(CARDS, store, detailKey, ds, SETS);
+    $('detail-title').textContent = keyLabel(detailKey) + '（' + tracksOf(E.cardsForKey(CARDS, detailKey, SETS)).map(trackLabel).join(' / ') + '）';
+    var list = E.cardList(CARDS, store, detailKey, dirs(), SETS);
     var html = '';
     list.forEach(function (row) {
-      var stt = ds.map(function (d) { return stateLabel(row.states[d]); }).join(' / ');
+      var stt = Object.keys(row.states).map(function (d) { return stateLabel(row.states[d]); }).join(' / ');
+      var plain = E.catConf(row.card.category).plain;
       html += '<div class="drow' + (row.any ? ' has' : '') + '">' +
+        (plain ? '<span class="nm"><b>' + E.escapeHtml(row.card.name) + '</b><span class="desc">' + E.escapeHtml(row.card.symbol) + '</span></span>' :
         '<span class="sym">' + E.renderTokens(E.tokenize(row.card.symbol), 99, true) + '</span>' +
-        '<span class="nm">' + E.escapeHtml(row.card.name) + '</span>' +
+        '<span class="nm">' + E.escapeHtml(row.card.name) + '</span>') +
         '<span class="stt' + (row.grad ? ' g' : '') + '">' + E.escapeHtml(stt) + '</span>' +
         '<button type="button" class="rst" data-card="' + E.escapeHtml(row.card.id) + '">戻す</button></div>';
     });
@@ -358,7 +383,8 @@
   }
   $('detail-list').addEventListener('click', function (e) {
     var b = e.target.closest('button[data-card]'); if (!b) return;
-    dirs().forEach(function (d) { E.resetCard(store, b.getAttribute('data-card'), d); });
+    var id = b.getAttribute('data-card');
+    E.dirsForCards(CARDS.filter(function (c) { return c.id === id; }), dirs()).forEach(function (d) { E.resetCard(store, id, d); });
     save(); renderDetail();
   });
   $('btn-detail-top').addEventListener('click', toTop);
@@ -395,8 +421,8 @@
     var h = current(); if (!h) return;
     var it = h.item;
     var qt = E.tokenize(it.face), at = E.tokenize(it.answer);
-    $('q').className = 'face ' + (it.faceIsFormula ? 'formula' : 'jp');
-    $('a').className = 'face ' + (it.answerIsFormula ? 'formula' : 'jp');
+    $('q').className = faceClass(it.faceIsFormula, it.plain, it.face);
+    $('a').className = faceClass(it.answerIsFormula, it.plain, it.answer);
     $('q-txt').innerHTML = E.renderTokens(qt, qt.length, it.faceIsFormula);
     var full = h.revealed >= at.length;
     $('a-txt').innerHTML = E.renderTokens(at, h.revealed, it.answerIsFormula) +
@@ -404,6 +430,12 @@
     $('btn-latest').classList.toggle('hidden', S.pos >= S.hist.length - 1);
     $('pos').textContent = (S.pos < S.hist.length - 1) ? ((S.hist.length - 1 - S.pos) + ' 枚前') : '';
     Array.prototype.forEach.call($('marks').children, function (b) { b.classList.toggle('sel', h.mark === b.getAttribute('data-m')); });
+  }
+
+  function faceClass(formula, plain, text) {
+    if (formula) return 'face formula';
+    var n = plain ? text.length : 0;
+    return 'face jp' + (n > 24 ? ' xlong' : n > 10 ? ' long' : '');
   }
 
   function hint() {
@@ -459,9 +491,12 @@
   });
 
   /* ===================== トップの操作 ===================== */
-  $('seg-dir').addEventListener('click', function (e) {
-    var b = e.target.closest('button'); if (!b) return;
-    store.settings.dir = b.getAttribute('data-dir'); save(); renderTop();
+  $('dirs').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-dir]'); if (!b) return;
+    var g = GROUPS[+b.parentNode.getAttribute('data-g')], d = b.getAttribute('data-dir');
+    if (g.category) { store.settings.dirBy = store.settings.dirBy || {}; store.settings.dirBy[g.category] = d; }
+    else store.settings.dir = d;
+    save(); renderTop();
   });
   $('sw-freq').addEventListener('click', function () { store.settings.freq = !store.settings.freq; save(); renderTop(); });
   $('levels').addEventListener('change', function (e) {
@@ -477,9 +512,10 @@
     var b = e.target.closest('button[data-rst]'); if (!b) return;
     e.preventDefault();
     var lk = b.getAttribute('data-rst');
-    var label = keyLabel(lk) + (dirs().length > 1 ? '' : '（' + DIR_LABEL[dirs()[0]] + '）');
+    var tr = tracksOf(E.cardsForKey(CARDS, lk, SETS));
+    var label = keyLabel(lk) + (tr.length > 1 ? '' : '（' + trackLabel(tr[0]) + '）');
     if (!confirm(label + ' の学習記録をリセットします。いいですか？')) return;
-    dirs().forEach(function (d) { E.resetLevel(store, CARDS, lk, d, SETS); });
+    tr.forEach(function (t) { E.resetLevel(store, CARDS, lk, t.dir, SETS); });
     save(); renderTop();
   });
   $('btn-start').addEventListener('click', startSession);
@@ -494,6 +530,7 @@
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').catch(function () { /* 圏外や非対応は黙って諦める */ });
   }
+  if (PAGE.howto) $('howto').innerHTML = PAGE.howto.map(function (h) { return '<li>' + h + '</li>'; }).join('');
   renderTop();
   if (store.settings.levels.length) startSession();   // 中断再開前提：前回の続きから
 })();

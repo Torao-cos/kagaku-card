@@ -1,6 +1,6 @@
 /* sw.js — stale-while-revalidate。一度開けば以後は圏外でも開ける（絶対保証はしない）。
  * VERSION / CACHE_PREFIX / SW_SKIP のプレースホルダは build.js がページごとに差し替える。
- * 同一オリジンに複数ページ（/ と /ion/）が並ぶため、消すのは自分の prefix のキャッシュだけ。
+ * 同一オリジンに複数ページ（/ と /chu2/）が並ぶため、消すのは自分の prefix のキャッシュだけ。
  * SKIP（scope からの相対パス）配下は別ページの SW の担当なので触らない。 */
 var PREFIX = '__CACHE_PREFIX__';
 var CACHE = PREFIX + '__VERSION__';

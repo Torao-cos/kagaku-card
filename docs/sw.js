@@ -1,10 +1,10 @@
 /* sw.js — stale-while-revalidate。一度開けば以後は圏外でも開ける（絶対保証はしない）。
  * VERSION / CACHE_PREFIX / SW_SKIP のプレースホルダは build.js がページごとに差し替える。
- * 同一オリジンに複数ページ（/ と /ion/）が並ぶため、消すのは自分の prefix のキャッシュだけ。
+ * 同一オリジンに複数ページ（/ と /chu2/）が並ぶため、消すのは自分の prefix のキャッシュだけ。
  * SKIP（scope からの相対パス）配下は別ページの SW の担当なので触らない。 */
 var PREFIX = 'kagaku-card-';
-var CACHE = PREFIX + '296e5e3bb9';
-var SKIP = ["ion/"];
+var CACHE = PREFIX + 'd046b1ae80';
+var SKIP = ["chu2/"];
 var ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-180.png'];
 
 self.addEventListener('install', function (e) {

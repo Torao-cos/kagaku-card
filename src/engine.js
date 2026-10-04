@@ -33,8 +33,34 @@
 
   var DIRS = ['sn', 'ns'];   // sn = 記号→名称（既定） / ns = 名称→記号
   var DIR_LABEL = { sn: '記号 → 名称', ns: '名称 → 記号' };
-  var CATEGORIES = ['元素記号', '化学式', 'イオン'];   // 並び順もこの順
-  var CAT_ORDER = { '元素記号': 0, '化学式': 1, 'イオン': 2 };
+  var CATEGORIES = ['元素記号', '化学式', 'イオン', '用語'];
+  var CAT_ORDER = { '用語': -1, '元素記号': 0, '化学式': 1, 'イオン': 2 };
+
+  /* カテゴリ別の設定。dirs = 出題できる方向／plain = 普通の文章（記号の正規化・元素チェック・下付きなし）。
+   * 用語は symbol = 説明文（sn の問題面）・name = 用語 として持つ */
+  var CAT_CONF = {
+    '用語': { plain: true }
+  };
+  function catConf(category) {
+    var c = CAT_CONF[category] || {};
+    return { dirs: c.dirs || DIRS, plain: !!c.plain };
+  }
+  /**
+   * そのカテゴリで実際に使う方向。dirs は全カテゴリ共通の配列（['sn','ns']）か、
+   * カテゴリ別の指定 { '用語': ['sn'], 'イオン': ['ns'] }（無いカテゴリは両方向）。許可外は除き、空ならカテゴリ既定
+   */
+  function effectiveDirs(category, dirs) {
+    var allowed = catConf(category).dirs;
+    var req = Array.isArray(dirs) ? dirs : ((dirs && dirs[category]) || DIRS);
+    var ds = req.filter(function (d) { return allowed.indexOf(d) >= 0; });
+    return ds.length ? ds : allowed.slice();
+  }
+  /** カード集合で使う方向の和集合（要求順） */
+  function dirsForCards(cardsSubset, dirs) {
+    var out = [];
+    cardsSubset.forEach(function (c) { effectiveDirs(c.category, dirs).forEach(function (d) { if (out.indexOf(d) < 0) out.push(d); }); });
+    return out;
+  }
 
   /* 118元素（検証用。データの誤字を弾く） */
   var ELEMENTS = ('H He Li Be B C N O F Ne Na Mg Al Si P S Cl Ar K Ca Sc Ti V Cr Mn Fe Co Ni Cu Zn Ga Ge As Se Br Kr ' +
@@ -137,11 +163,12 @@
 
   /** CSV 由来の生行 → 正規化カード。level は整数化。 */
   function normalizeCard(row) {
+    var cat = String(row.category || '').trim(), plain = catConf(cat).plain;
     var c = {
-      category: String(row.category || '').trim(),
+      category: cat,
       level: parseInt(row.level, 10),
-      name: normalizeName(row.name),
-      symbol: normalizeSymbol(row.symbol),
+      name: plain ? String(row.name || '').trim() : normalizeName(row.name),
+      symbol: plain ? String(row.symbol || '').trim() : normalizeSymbol(row.symbol),
       note: String(row.note || '').trim()
     };
     c.id = cardId(c);
@@ -153,11 +180,18 @@
    */
   function validateCards(cards) {
     var errs = [];
-    var seen = Object.create(null);
+    var seen = Object.create(null), seenFace = Object.create(null);
     cards.forEach(function (c, idx) {
       var where = (idx + 2) + '行目 ' + (c.name || '?') + ' / ' + (c.symbol || '?');
       if (CATEGORIES.indexOf(c.category) < 0) errs.push({ row: idx, msg: where + ': category は ' + CATEGORIES.join('/') + ' のみ' });
       if (!(c.level >= 1 && c.level <= 9)) errs.push({ row: idx, msg: where + ': level は 1〜9 の整数' });
+      if (catConf(c.category).plain) {
+        if (!c.symbol) errs.push({ row: idx, msg: where + ': 問題文が空' });
+        if (!c.name) errs.push({ row: idx, msg: where + ': 答えが空' });
+        if (seenFace[c.category + '|' + c.symbol]) errs.push({ row: idx, msg: where + ': 問題文の重複' });
+        seenFace[c.category + '|' + c.symbol] = true;
+        return;
+      }
       if (!c.name) errs.push({ row: idx, msg: where + ': name が空' });
       if (!c.symbol) errs.push({ row: idx, msg: where + ': symbol が空' });
       if (seen[c.id]) errs.push({ row: idx, msg: where + ': 重複行' });
@@ -254,16 +288,19 @@
   function buildItems(selectedCards, dirs) {
     function catRank(c) { return CAT_ORDER[c] === undefined ? 9 : CAT_ORDER[c]; }
     var items = [];
-    (dirs || DIRS).forEach(function (dir) {
+    var useDirs = dirsForCards(selectedCards, dirs);
+    (Array.isArray(dirs) ? dirs : DIRS).concat(DIRS).filter(function (d, i, a) { return a.indexOf(d) === i && useDirs.indexOf(d) >= 0; }).forEach(function (dir) {
       var byFace = Object.create(null);
       var order = [];
       selectedCards.forEach(function (c) {
-        var face = (dir === 'sn') ? c.symbol : c.name;
-        if (!byFace[face]) { byFace[face] = []; order.push(face); }
-        byFace[face].push(c);
+        if (effectiveDirs(c.category, dirs).indexOf(dir) < 0) return;
+        var gk = (catConf(c.category).plain ? 'P|' : '') + ((dir === 'sn') ? c.symbol : c.name);
+        if (!byFace[gk]) { byFace[gk] = []; order.push(gk); }
+        byFace[gk].push(c);
       });
-      order.forEach(function (face) {
-        var group = byFace[face];
+      order.forEach(function (gk) {
+        var group = byFace[gk], plain = catConf(group[0].category).plain;
+        var face = (dir === 'sn') ? group[0].symbol : group[0].name;
         // 答え候補をカテゴリ別にまとめる（重複名は1回）
         var cats = Object.create(null), catOrder = [];
         var notes = [], seenAns = Object.create(null);
@@ -277,12 +314,13 @@
         var answer = catOrder.map(function (cat) { return cats[cat].join('・'); })
           .filter(function (s) { return s.length > 0; }).join('／');
         items.push({
-          key: 'F|' + dir + '|' + face,
+          key: 'F|' + dir + '|' + gk,
           dir: dir,
           face: face,
           answer: answer,
-          faceIsFormula: dir === 'sn',
-          answerIsFormula: dir === 'ns',
+          faceIsFormula: !plain && dir === 'sn',
+          answerIsFormula: !plain && dir === 'ns',
+          plain: plain,
           note: notes.join(' '),
           cardIds: group.map(function (c) { return c.id; })
         });
@@ -407,8 +445,9 @@
     var out = Object.create(null);
     cards.forEach(function (c) {
       var lk = levelKey(c);
-      if (!out[lk]) { out[lk] = {}; DIRS.forEach(function (d) { out[lk][d] = { total: 0, grad: 0 }; }); }
-      DIRS.forEach(function (d) {
+      var ds = catConf(c.category).dirs;
+      if (!out[lk]) { out[lk] = {}; ds.forEach(function (d) { out[lk][d] = { total: 0, grad: 0 }; }); }
+      ds.forEach(function (d) {
         out[lk][d].total += 1;
         if (getState(store, c.id, d).grad) out[lk][d].grad += 1;
       });
@@ -416,11 +455,35 @@
     return out;
   }
 
-  /** カード集合×方向の { total, grad } */
+  /** カード集合×方向の { total, grad }（その方向を出さないカテゴリのカードは数えない） */
   function progressOf(cardsSubset, store, dir) {
     var total = 0, grad = 0;
-    cardsSubset.forEach(function (c) { total += 1; if (getState(store, c.id, dir).grad) grad += 1; });
+    cardsSubset.forEach(function (c) {
+      if (catConf(c.category).dirs.indexOf(dir) < 0) return;
+      total += 1; if (getState(store, c.id, dir).grad) grad += 1;
+    });
     return { total: total, grad: grad };
+  }
+  /**
+   * 進捗の列 [{ key, category, dir, total, grad }]。各カードを effectiveDirs の方向ぶん数える。
+   * dirs が配列なら列＝方向（category は null。cardsSubset が空でも dirs の列を 0/0 で返す）、
+   * カテゴリ別指定なら列＝カテゴリ×方向（出てきた順）。
+   */
+  function progressTracks(cardsSubset, store, dirs) {
+    var byCat = !Array.isArray(dirs), byKey = Object.create(null), out = [];
+    function track(cat, d) {
+      var key = (cat ? cat + '|' : '') + d;
+      if (!byKey[key]) { byKey[key] = { key: key, category: cat, dir: d, total: 0, grad: 0 }; out.push(byKey[key]); }
+      return byKey[key];
+    }
+    if (!byCat) dirs.forEach(function (d) { track(null, d); });
+    cardsSubset.forEach(function (c) {
+      effectiveDirs(c.category, dirs).forEach(function (d) {
+        var t = track(byCat ? c.category : null, d);
+        t.total += 1; if (getState(store, c.id, d).grad) t.grad += 1;
+      });
+    });
+    return out;
   }
   /** 選択範囲×方向の合計 { total, grad }（レベルとセットで同じカードが重なっても1枚として数える） */
   function summary(cards, store, selectedKeys, dir, sets) {
@@ -437,10 +500,9 @@
    * 戻り値: [{ card, grad(全方向で覚えた), any(何か記録あり), states: {sn:{...}, ns:{...}} }] — 覚えた → 覚えた×1 → 記録あり → 未 の順
    */
   function cardList(cards, store, lk, dirs, sets) {
-    var ds = dirs || DIRS;
     var out = cardsForKey(cards, lk, sets).map(function (c) {
       var states = {}, grad = true, any = false;
-      ds.forEach(function (d) {
+      effectiveDirs(c.category, dirs).forEach(function (d) {
         var k = itemKey(c.id, d);
         states[d] = store.items[k] || null;
         if (states[d]) any = true;
@@ -461,9 +523,8 @@
 
   /** レベル or セット × 方向のリセット（dir 省略で両方向） */
   function resetLevel(store, cards, lk, dir, sets) {
-    var dirs = dir ? [dir] : DIRS;
     cardsForKey(cards, lk, sets).forEach(function (c) {
-      dirs.forEach(function (d) { delete store.items[itemKey(c.id, d)]; });
+      (dir ? [dir] : catConf(c.category).dirs).forEach(function (d) { delete store.items[itemKey(c.id, d)]; });
     });
   }
 
@@ -485,6 +546,7 @@
 
   return {
     CONFIG: CONFIG, DIRS: DIRS, DIR_LABEL: DIR_LABEL, CATEGORIES: CATEGORIES, ELEMENTS: ELEMENTS,
+    catConf: catConf, effectiveDirs: effectiveDirs, dirsForCards: dirsForCards, progressTracks: progressTracks,
     normalizeSymbol: normalizeSymbol, normalizeName: normalizeName, normalizeCard: normalizeCard,
     tokenize: tokenize, isCharge: isCharge, renderTokens: renderTokens, escapeHtml: escapeHtml,
     cardId: cardId, levelKey: levelKey, itemKey: itemKey,
