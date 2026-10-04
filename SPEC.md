@@ -1,6 +1,6 @@
 # 元素記号・化学式カード — 仕様書（正本）
 
-最終更新: 2026-10-04（v1.5: 中2化学 テスト対策カード `/chu2/`・§8.5）／ 合意者: owner ／ 状態: 公開中 https://kagaku-card.pages.dev/
+最終更新: 2026-10-04（v1.5: 中2理科A テスト対策カード `/chu2/`・§8.5）／ 合意者: owner ／ 状態: 公開中 https://kagaku-card.pages.dev/
 
 > 中学生向けの暗記用フラッシュカード。クイズではない。赤シートのように「答えを隠して→タップで開く」だけの学習加速ツール。
 > 評価は授業のテストで行う。アプリは成績を集計しないし、サーバも持たない。
@@ -211,12 +211,12 @@ set,category,level,symbol
 - **ソース**: GitHub public リポジトリ **https://github.com/Torao-cos/kagaku-card**（2026-09-23 作成・push済み）。ホスティングには使わない。push は `tools/push.js`（リポ限定の fine-grained PAT を git 管理外ファイルから読む）
 - **更新手順（1コマンド）**: `npm run ship` = テスト → 検証・ビルド → Cloudflare デプロイ → GitHub push（＝GitHub Pages も更新）。認証情報は git 管理外のファイル（`tools/deploy.js` / `tools/push.js` 冒頭参照）
 
-## 8.5 中2化学 テスト対策カード（別ページ `/chu2/`・2026-10-04）
+## 8.5 中2理科A テスト対策カード（別ページ `/chu2/`・2026-10-04）
 
 中2向けに、テスト範囲の**用語**と**イオン式**を1ページにまとめた別ページ。同じエンジン・同じUI挙動（ヒント・全表示・スワイプ・「覚えた」・頻度調整・一覧・リセット）。トップページからはリンクしない（ハブサイトがリンクする）。旧 `/ion/`（イオン式単独・未公開）はこのページに統合して削除した（リダイレクトなし）。
 
 - **URL**: `/chu2/`（https://kagaku-card.pages.dev/chu2/ ／ https://torao-cos.github.io/kagaku-card/chu2/）。出力 `docs/chu2/`（index.html・sw.js・manifest・アイコン・version.txt を独立に持つ）
-- **タイトル**: 中2化学 テスト対策カード（ホーム画面名 中2化学カード）
+- **タイトル**: 中2理科A テスト対策カード（ホーム画面名 中2理科Aカード）
 - **保存キー**: `kagaku-chu2-v1`（中1ページの `kagaku-card-v1` とは別）／**SW キャッシュ prefix**: `kagaku-chu2-`。activate で消すのは自分の prefix だけ。ルートの SW は `chu2/` 配下に触らない
 - ページ定義は `build.js` の `PAGES`（id `chu2`）
 

@@ -35,7 +35,7 @@ const PAGES = [
     // 中2テスト対策: 用語（terms CSV・section ごとに1範囲）＋イオン式。向きはカテゴリごとに別設定
     id: 'chu2', terms: path.join(ROOT, 'data', 'chu2-terms-2026-vol3.csv'),
     csv: path.join(ROOT, 'data', 'ions.csv'), sets: path.join(ROOT, 'data', 'chu2-sets.csv'), out: path.join(DIST, 'chu2'),
-    title: '中2化学 テスト対策カード', shortName: '中2化学カード', storageKey: 'kagaku-chu2-v1', cachePrefix: 'kagaku-chu2-',
+    title: '中2理科A テスト対策カード', shortName: '中2理科Aカード', storageKey: 'kagaku-chu2-v1', cachePrefix: 'kagaku-chu2-',
     defaultDir: 'ns', dirLabels: null,
     dirGroups: [
       { category: '用語', heading: '用語の向き', labels: { sn: '説明 → 用語', ns: '用語 → 説明' }, def: 'sn' },

@@ -1,6 +1,6 @@
 {
-  "name": "中2化学 テスト対策カード",
-  "short_name": "中2化学カード",
+  "name": "中2理科A テスト対策カード",
+  "short_name": "中2理科Aカード",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

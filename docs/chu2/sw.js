@@ -3,7 +3,7 @@
  * 同一オリジンに複数ページ（/ と /chu2/）が並ぶため、消すのは自分の prefix のキャッシュだけ。
  * SKIP（scope からの相対パス）配下は別ページの SW の担当なので触らない。 */
 var PREFIX = 'kagaku-chu2-';
-var CACHE = PREFIX + '0551878332';
+var CACHE = PREFIX + '6cc89895d7';
 var SKIP = [];
 var ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-180.png'];
 
