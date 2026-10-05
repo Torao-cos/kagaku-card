@@ -208,8 +208,8 @@ set,category,level,symbol
   - **Cloudflare Pages（2026年度中1試験ではこちらのURLを配布）**: プロジェクト `kagaku-card` → **https://kagaku-card.pages.dev/**。アカウント `jiyuunatorao@gmail.com`
   - 本命は Workers（Static Assets）だったが、手元の API トークンが Pages:Edit スコープのみで Workers 経路が認証エラー → wrangler の案内どおり旧 Pages 経路（`--force` で作成）に置いた。静的ファイルだけなので Workers への移行は「Workers 権限つきトークンを1本作る → `wrangler deploy`」で完了する（生徒側のURLは変わるので配り直しが要る＝移行するなら早いうちに）
   - `wrangler.jsonc` は Workers 用に残してある。Pages デプロイは `tools/deploy.js` が docs/ を一時ディレクトリにコピーして実行する（同じ場所に wrangler.jsonc があると Pages が拒否するため）
-- **ソース**: GitHub public リポジトリ **https://github.com/Torao-cos/kagaku-card**（2026-09-23 作成・push済み）。ホスティングには使わない。push は `tools/push.js`（リポ限定の fine-grained PAT を git 管理外ファイルから読む）
-- **更新手順（1コマンド）**: `npm run ship` = テスト → 検証・ビルド → Cloudflare デプロイ → GitHub push（＝GitHub Pages も更新）。認証情報は git 管理外のファイル（`tools/deploy.js` / `tools/push.js` 冒頭参照）
+- **ソース**: GitHub public リポジトリ **https://github.com/Torao-cos/kagaku-card**（2026-09-23 作成・push済み）。ホスティングには使わない。push は `tools/push.js`（リポ限定の fine-grained PAT を company 共通ローダー経由で `D:/claude_projects/company/.env` の `GITHUB_PAT_KAGAKU_CARD` から読む）
+- **更新手順（1コマンド）**: `npm run ship` = テスト → 検証・ビルド → Cloudflare デプロイ → GitHub push（＝GitHub Pages も更新）。認証情報は `D:/claude_projects/company/.env`（gitignore済み）の `CLOUDFLARE_PAGES_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` / `GITHUB_PAT_KAGAKU_CARD` を `D:/claude_projects/company/tools/load-secrets.js` で読む（旧 claude_share/control の平文ファイルは2026-10-05廃止。`tools/deploy.js --check` / `tools/push.js --check` で読み取りのみ確認）
 
 ## 8.5 中2理科A テスト対策カード（別ページ `/chu2/`・2026-10-04）
 
